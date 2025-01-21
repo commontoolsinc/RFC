@@ -24,19 +24,12 @@ This is a description of the websocket based API.
  * and then send another.
  */
 type Command = {
- pull?: Record<string, Read>
- push?: Record<string, Write>
+ pull?: Record<string, Push>
+ push?: Record<string, Pull>
  watch?: Record<string, Watch>
  unwatch?: Record<string, Watch>
 }
 
-/**
- * Describes operation target.
- */
-type Entity = [
-  database: DatabaseID
-  document: DocumentID
-]
 
 /**
  * Database identifier. It is RECOMMENDED to
