@@ -23,11 +23,11 @@ This is a description of the websocket based API.
  * ⚠️ Execution order is non-deterministic. If you need order send one command
  * and then send another.
  */
-type Command = {
- pull?: Record<string, Push|ForcedPush>
+interface Command {
+ pull?: Record<string, Push>
  push?: Record<string, Pull>
- watch?: Record<string, Watch>
- unwatch?: Record<string, Watch>
+ watch?: Record<string, DocumentAddress>
+ unwatch?: Record<string, DocumentAddress>
 }
 
 
@@ -48,29 +48,32 @@ type DocumentID = string
 
 
 /**
- * Updates document (`the`) in the repository (`of`) to the `is` value.
- * If `cause` is specified ensures that document has not being modified. 
+ * Sets document (`entity`) state to a given value (`state`) in the repository (`target`)
+ * if `cause` invariant is true.
  */
-type Push = {
-  the: DocumentID
-  of: RepositoryID
-  
-  is: JSON
-  
-  cause: Checksum
+interface Push {
+  /**
+   * Repository being updated.
+   */
+  replica: RepositoryID
+
+  /**
+   * Document being updated
+   */
+  entity: DocumentID
+
+  /**
+   * State document being updated to
+   */
+  state: JSON
+    
+  /**
+   * State invariant, that needs to be true for push to
+   * succeed. Omitting implies new document creation.
+   */
+  cause?: Checksum
 }
 
-/**
- * Push without invariant check which will overwrite document.
- */
-type ForcedPush {
-  the: DocumentID
-  of: RepositoryID
-  
-  is: JSON
-
-  cause?: undefined
-}
 
 /**
  * Document checksum. Store implementation can choose whatever
@@ -79,43 +82,42 @@ type ForcedPush {
 type Checksum = string
 
 /**
- * Pulls JSON document content from the specified repository. If
- * `cause` is specified pull will omit `is` when checksum of the
- * document matches is current.
+ * Operation for pulling document state from the
+ * specified repository. If `cause` invariant is
+ * set and it corresponds to current document state,
+ * result will not contain `state`.
  */
-type Pull = {
-  the: DocumentID
-  of: RepositoryID
-  
+interface Pull {
+  replica: RepositoryID
+  entity: DocumentID
   cause?: Checksum
 }
 
 /**
- * Registeres watcher for the document.
+ * Same as `Pull` but without `cause` invariant, implying
+ * that result will always contain `state`
  */
-type Watch = {
-  the: DocumentID
-  of: RepositoryID
+interface Address = {
+  replica: RepositoryID
+  entity: DocumentID
 }
 
-/**
- * Status of the document in the repository.
- */
-type Status = {
-  the: DocumentID
-  of: RepositoryID
+interface Status extends Address {
   cause: Checksum
 }
 
+interface State extends Status {
+ state: JSON
+}
 
 
 /**
  * Describes response returned for the command.
  */
 type Receipt<For extends Command> = {
-  pull: { [Key in keyof For['pull']]: Result<Push|Status, PullError> }
+  pull: { [Key in keyof For['pull']]: Result<State|Status, PullError> }
   push: { [Key in keyof For['push']]: Result<Status, PushError> }
-  watch: { [Key in keyof For['watch']]: Result<Push, WatchError> }
+  watch: { [Key in keyof For['watch']]: Result<State, WatchError> }
   unwatch: { [Key in keyof For['unwatch']]: Result<Status, UnwatchError> }
 }
 ```
@@ -134,25 +136,26 @@ Command MAY contain `pull`, `push`, `watch` and `unwatch` operation sets, repres
 const response = client.request({
   pull: {
     profile: {
-      the: "4301a667-5388-4477-ba08-d2e6b51a62a3",
-      of: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi"
+      replica: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi"
+      entity: "4301a667-5388-4477-ba08-d2e6b51a62a3",
+      
     },
     recepies: {
-      the: "4301a667-5388-4477-ba08-d2e6b51a62a3",
-      of: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
+      replica: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
+      entity: "4301a667-5388-4477-ba08-d2e6b51a62a3",
       cause: "ba4jcb2tb7gb5llskpwvdfxckvvkmrsl4lfooktkfd4thucfgawd7ghqp"
     }
   },
   push: {
     status: {
-      the: "8c642d0d-9c67-4925-9fe5-405486e7dea7",
-      of: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
-      is: { online: Date.now() },
+      replica: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
+      entity: "8c642d0d-9c67-4925-9fe5-405486e7dea7",
+      state: { online: Date.now() },
     },
     description: {
-      the: "3c8b0faf-cfb7-4537-a040-78bb48cfb962",
-      of: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
-      is: { "description": "Chief Witch" },
+      replica: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
+      entity: "3c8b0faf-cfb7-4537-a040-78bb48cfb962",
+      state: { "description": "Chief Witch" },
       cause: "ba4jcbmzammd3t4cwbpfdxjbo4st4k4azmaozlhtklv6rxkppuxal3ywe"
     }
   },
@@ -167,9 +170,9 @@ assert.deepEqual(response, {
     pull: {
       profile: {
         ok: {
-          the: "4301a667-5388-4477-ba08-d2e6b51a62a3",
-          of: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
-          is: { value: { name: "Alice" } },
+          replica: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
+          entity: "4301a667-5388-4477-ba08-d2e6b51a62a3",
+          state: { value: { name: "Alice" } },
           cause: "ba4jcbgvygxoujlhz5a44cfyxtnrb6a6zxby2mdjhbthee7jvkcijdmlg"
         }
       },
@@ -183,17 +186,17 @@ assert.deepEqual(response, {
     push: {
       status: {
         ok: {
-          the: "8c642d0d-9c67-4925-9fe5-405486e7dea7",
-          of: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
+          replica: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
+          entity: "8c642d0d-9c67-4925-9fe5-405486e7dea7",
           cause: "ba4jcb3cxb2lvygdel7ljg4akgvppv6lrblhznsclcruz2m7ya75p4cvn"
         }
       },
       description: {
         error: {
           name: "PushError",
-          the: "3c8b0faf-cfb7-4537-a040-78bb48cfb962",
-          of: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
-          is: { value: { online: 1737492200331 } },
+          replica: "did:key:z6Mkk89bC3JrVqKie71YEcc5M1SMVxuCgNx6zLZ8SYJsxALi",
+          entity: "3c8b0faf-cfb7-4537-a040-78bb48cfb962",
+          state: { value: { online: 1737492200331 } },
           
           expected: "ba4jcbmzammd3t4cwbpfdxjbo4st4k4azmaozlhtklv6rxkppuxal3ywe"
           actual: "ba4jcbpionvcxjrzkl6lkwp5vtaanzwdnh5ydgrnylhd3cmjuemxr2owh",
@@ -208,38 +211,61 @@ assert.deepEqual(response, {
 
 ### Pull
 
-Pulls latest document from the store. If `cause` checksum is provided and state of the document in the store matches it response will not include the `is` field. If `cause` is omitted or it is different from the stored document result will include `is` with the latest document state.
+Pulls latest document state from the store. If document state corresponds to specified `cause` checksum result will be `Status` as opposed to `State` leaving out document snapshot (since it has not change).
 
-Attempt to pull document will fail if either document or repository does not exist.
+> ℹ️ To force `state` inclusion simply leave out `cause` field in the `Pull` request.
+
+Attempt to pull document fails if pulled document or the source repository does not exist.
+
 
 ### Push
 
-Pushes changed document into a specified repository. If document does not exist new document will be created. If repository does not exist new one will be created.
+Swaps document state in the `source` repository with a [Compare and Swap (CAS)][CAS] transactional guarantees, that is operation fails if `cause` field does not correspond to the current document state.
 
-If `cause` is specified it is used to enforce the invariant, meaning update will fail if the target checksum does not match specified `cause`.
+Omiting `cause` field implies new document creation and push will fail if such does already exists. If new document is pushed to non existing `source` repository new repository will be created.
 
-If `cause` is omitted document will be overwritten or new document will be created.
-
-
-> ℹ️ To ensure that new document is create merkle-reference of empty object `{}` `ba4jcbckylwzunx663kx5t7lgkjmgglyhz4fet3pge7dl7wmg677jlyfm` could be specified.
+> ⚠️ It is likely that new repository creation will work differently in the future when there is access control in place.
 
 
 ### Watch
 
-Watch operation can be used in order to subscribe to document changes. When subscribed store will return `Required<Push>` for the current document state and will send subsequent `Required<Push>` objects every time document is updated.
+Watch operation can be used into subscribe to the document state changes in the `source` repository. Succesful operation will return `State` result for the current document state. `State` updates will also be pushed every time document is updated.
 
 Duration of watch is session bound, meaning that after client disconnects all the watches will be dropped and it's up to client to set them up again.
 
-> ⚠️ Only one unique document watch per session is allowed, meaning client can watch several documents but issuing watch to the same document multiple times will be considered noop. That is to say it's up to cient to deal with multiple customers it may have locally for the same document.
+#### Unwatch
 
-Watches are not persisted across sessions, meaning once cliend disconnects all the watches are dropped.
-
-#### unwatch
-
-Stops watching a document for changes. Once document is unwatched no future push notifications will be send by the store for that document.
+Stops watching a document for changes. Once document is unwatched no future push notifications will be pushed to the client.
 
 ## Persistence
 
 JSON documents will be persisted in SQLite. It will be [stored as ordinary text](https://arc.net/l/quote/vsmijstd) and all read/write operations will use [SQLites builtin JSON functionality](https://www.sqlite.org/json1.html).
 
 
+## Database Schema
+
+Each repository is a sqlite database consisting of a single table with primary key corresponding to `DocumentID` and JSON type `state` column. Additional `cause` column is used to manage atomic updates.
+
+
+```mermaid
+erDiagram
+    state {
+      entity TEXT
+      state JSON
+      cause TEXT
+    }
+```
+
+
+## Document metadata
+
+Metadata SHOULD be stored as part of the document. SQLite will not index JSON documents in any way, so while it will be possible to query documents (by metadata or state) they will not be optimized.
+
+In the future we may choose to replicate some document fields in order to index them, however that introduces document schemas and typing and etc... so we'll need to choose between:
+
+1. Keep evolving schema as requirements change.
+2. Use triples for blanket indexing.
+3. Only support specific fields _(Which is basically optimistic take on 1st option)_.
+
+[CAS]:https://en.wikipedia.org/wiki/Compare-and-swap
+[merkle reference]:https://github.com/Gozala/merkle-reference/blob/main/docs/spec.md
