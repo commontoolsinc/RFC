@@ -179,6 +179,57 @@ A retraction represents the deletion of a fact from the space. When retracting a
 
 Retractions are used to logically delete facts while maintaining causal history. They do not break the causal chain but rather extend it, allowing the system to track when and why facts were removed.
 
+### Commit
+
+A commit represents a record of a complete transaction applied to the space. Each transaction creates a successor fact with the following characteristics:
+- `the` field is set to `application/commit+json`
+- `of` field is set to the space [did:key]
+- `is` field contains the signed UCAN invocation for the `/memory/transact` operation
+
+This commit pattern creates a complete, append-only transaction history for the space, where each transaction is permanently recorded with its full details. The commit chain provides several important benefits:
+
+1. **Auditability** - The complete history of all changes to the space can be audited by traversing the commit chain
+2. **Provenance** - Each commit includes the signed UCAN invocation, which records who authorized the transaction and what capabilities were delegated
+3. **Consistency** - The commit chain preserves the causal ordering of all transactions, ensuring a clear timeline of changes
+4. **Recovery** - The commit history can be used to rebuild the state of the space at any point in time
+
+Commits follow the same causal chain pattern as regular facts, with each commit referencing its predecessor via the `cause` field. This creates an unbroken chain of all transactions ever applied to the space, providing a complete audit trail from the space's creation to its current state.
+
+#### Commit Chain Visualization
+
+The following diagram illustrates how the commit chain tracks transactions:
+
+```mermaid
+graph RL
+    classDef commit fill:#4DABF7,stroke:#4F72FC,stroke-width:1px,color:#fff,rx:10,ry:10;
+    classDef fact fill:#099268,stroke:#099268,stroke-width:1px,color:#fff,rx:10,ry:10;
+    classDef retraction fill:#FF8787,stroke:#FF8787,stroke-width:1px,color:#fff,stroke-dasharray:5 5,rx:10,ry:10;
+    classDef virtual fill:#9398B080,stroke:#9398B0,stroke-width:1px,color:#fff,stroke-dasharray:5 5,rx:10,ry:10;
+    
+    C1["the: application/commit+json<br>of: did:key:space<br>is: {signed UCAN invocation 1}"]:::commit
+    C2["the: application/commit+json<br>of: did:key:space<br>is: {signed UCAN invocation 2}"]:::commit -->|cause| C1
+    C3["the: application/commit+json<br>of: did:key:space<br>is: {signed UCAN invocation 3}"]:::commit -->|cause| C2
+    
+    F1["the: application/json<br>of: user:alice<br>is: {name: 'Alice'}"]:::fact 
+    F2["the: application/json<br>of: user:alice<br>is: {name: 'Alice', age: 30}"]:::fact -->|cause| F1
+    F3["the: application/json<br>of: user:alice"]:::retraction -->|cause| F2
+    
+    C1 -.-|transaction| F1
+    C2 -.-|transaction| F2
+    C3 -.-|transaction| F3
+```
+
+In this diagram:
+- Blue nodes are commits, each containing a signed UCAN invocation
+- Green nodes are fact assertions
+- Red nodes are fact retractions
+- Solid arrows show causal relationships between facts of the same type
+- Dotted lines show which transactions created which facts
+- Each commit forms part of an unbroken chain of all transactions
+- Regular facts maintain their own separate causal chains
+
+The commit mechanism enhances the space protocol with strong provenance guarantees, allowing systems to track not just what changed, but who authorized each change and when it occurred.
+
 ### Media Type Support
 
 Valid implementation MUST support `application/json` media type. More media types may be added in the future.
