@@ -442,13 +442,13 @@ The provider MUST process transactions atomically, following [compare and swap (
 
 ### `/memory/query`
 
-The query capability allows retrieving the current state of facts in a space.
+The query capability allows retrieving the state of facts in a space, either the current state or at a specific logical time point.
 
 #### Purpose
 
 This capability is used to:
 
-- Read the current state of facts in a space
+- Read the state of facts in a space (current or at a specific logical time)
 - Filter facts by resource, media type, or other criteria
 - Retrieve a consistent snapshot of the space at a point in time
 
@@ -473,7 +473,7 @@ type Selector {
 
 The `select` field defines which facts to retrieve, based on resource (`of`), media type (`the`), and optionally causal reference.
 
-The `since` field can limit results to facts derived from transactions after a specific point in the transaction log.
+The `since` field can limit results to facts derived from transactions after a specific logical time point in the transaction log, allowing retrieval of state at different points in time.
 
 #### Transactional Guarantees
 
@@ -531,7 +531,7 @@ Query for all commits:
 
 ### `/memory/subscribe` {#memorysubscribe}
 
-The subscribe capability allows receiving real-time updates when changes occur in a space.
+The subscribe capability allows receiving real-time updates when changes occur in a space, functioning as a push-based complement to the poll-based `/memory/query` capability.
 
 #### Purpose
 
@@ -540,6 +540,29 @@ This capability is used to:
 - Receive notifications when new transactions are committed
 - Maintain an up-to-date view of a space without polling
 - Build reactive applications that respond to changes
+- Enable push-based replication of facts matching specific criteria
+
+#### Request Format
+
+```ts
+type Subscription = {
+  select: Selector
+  since?: number
+}
+```
+
+The subscription request format mirrors the query format, using the same `Selector` structure to specify which facts to monitor. When facts matching the selector are added or modified, subscribers receive notifications with the updated facts.
+
+The `since` parameter functions similarly to query, allowing subscriptions to begin from a specific logical time point in the transaction log.
+
+#### Push vs Poll Architecture
+
+While `/memory/query` implements a traditional poll-based approach requiring clients to repeatedly request state, `/memory/subscribe` establishes a persistent connection that pushes updates to clients when changes occur. This:
+
+- Reduces network overhead by eliminating unnecessary polling
+- Decreases latency between state changes and client notifications
+- Enables efficient real-time replication across distributed systems
+- Supports building reactive user interfaces that reflect state changes immediately
 
 [Common Tools]: https://common.tools/
 [Irakli Gozalishvili]: https://github.com/gozala
