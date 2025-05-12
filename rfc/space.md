@@ -104,7 +104,7 @@ graph RL
     classDef note fill:none,stroke:none
 
     %% Fact Chains
-    subgraph UserAlice["the:&nbsp;application/json&nbsp;of:&nbsp;'user:alice'"]
+    subgraph UserAlice["the:&nbsp;'application/json'&nbsp;of:&nbsp;'user:alice'"]
         direction LR
         VF1["{}"]:::genesis
         F1["{is: {name: 'Alice'}}"]:::fact
@@ -117,7 +117,7 @@ graph RL
     end
 
     %% Commit Chain
-    subgraph TransactionLog["the:&nbsp;'application/json'&nbsp;of:&nbsp;'did:key:z6M...Ali'"]
+    subgraph TransactionLog["the:&nbsp;'application/commit+json'&nbsp;of:&nbsp;'did:key:z6M...Ali'"]
         direction TB
         VC["{}"]:::genesis
         C1["{is: {since: 0, transaction}}"]:::commit
