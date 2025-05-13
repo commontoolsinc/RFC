@@ -150,7 +150,7 @@ graph RL
 In this diagram:
 
 - Fact chains (green/red) are organized horizontally in subgraphs by resource
-- Commits (blue) form a vertical chain in the Transaction Log box
+- Commits (blue) form a chain in the Transaction Log box
 - Subgraph titles include both `the` and `of` fields for clarity
 - Node contents show the fact structure with explicit `is` field (empty objects `{}` for genesis nodes and retractions that have no `is` value)
 - Genesis nodes (semi-transparent) establish the starting points for each chain
