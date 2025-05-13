@@ -1,0 +1,93 @@
+/* 
+ * Space Protocol Color Palette
+ * 
+ * This file defines the standard colors used in the Space Protocol documentation
+ * as CSS variables for easy usage in web applications.
+ */
+
+:root {
+  /* Blue palette */
+  --primary-blue: #4F72FC;
+  --primary-light-blue: #4DABF7;
+  
+  /* Purple palette */
+  --primary-purple: #AE3EC9;
+  --primary-light-purple: #E599F7;
+  
+  /* Yellow/Orange palette */
+  --warning-yellow: #FFC034;
+  --warning-orange: #F76707;
+  
+  /* Green palette */
+  --success-dark-green: #099268;
+  --success-light-green: #40C057;
+  
+  /* Red palette */
+  --error-light-red: #FF8787;
+  --error-dark-red: #E03131;
+  
+  /* Gray palette */
+  --neutral-gray: #9398B0;
+  --neutral-light-gray: #F2F2F2;
+  
+  /* Text colors */
+  --text-dark: #000000;
+  --text-light: #FFFFFF;
+
+  /* Semantic colors */
+  --assertion-fill: var(--success-light-green);
+  --assertion-stroke: var(--success-dark-green);
+  --retraction-fill: var(--error-light-red);
+  --retraction-stroke: var(--error-dark-red);
+  --virtual-fill: #9398B080;
+  --virtual-stroke: var(--neutral-gray);
+  --server-fill: var(--warning-yellow);
+  --server-stroke: var(--warning-orange);
+  --note-fill: var(--neutral-light-gray);
+  --note-stroke: var(--neutral-gray);
+  --text-on-dark: var(--text-light);
+  --text-on-light: var(--text-dark);
+}
+
+/* Utility classes */
+.virtual {
+  background-color: var(--virtual-fill);
+  border: 1px dashed var(--virtual-stroke);
+  color: var(--text-on-dark);
+  border-radius: 4px;
+}
+
+.assertion {
+  background-color: var(--assertion-fill);
+  border: 1px solid var(--assertion-stroke);
+  color: var(--text-on-dark);
+  border-radius: 4px;
+}
+
+.retraction {
+  background-color: var(--retraction-fill);
+  border: 1px dashed var(--retraction-stroke);
+  color: var(--text-on-dark);
+  border-radius: 4px;
+}
+
+.server {
+  background-color: var(--server-fill);
+  border: 1px solid var(--server-stroke);
+  color: var(--text-on-dark);
+  border-radius: 4px;
+}
+
+.note, .neutral {
+  background-color: var(--note-fill);
+  border: 1px solid var(--note-stroke);
+  color: var(--text-on-light);
+  border-radius: 4px;
+}
+
+.rejected {
+  background-color: var(--retraction-fill);
+  border: 1px dashed var(--retraction-stroke);
+  color: var(--text-on-dark);
+  border-radius: 4px;
+}
