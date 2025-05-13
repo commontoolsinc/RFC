@@ -99,49 +99,7 @@ The identity system supports the issuance and verification of credentials:
 2. **Third-party attestations** - External parties can issue credentials attesting to various attributes of an identity
 3. **Selective disclosure** - Users can choose which aspects of their identity to reveal in different contexts
 
-## Capabilities
 
-### `/identity/resolve`
-
-The resolve capability allows retrieving the DID Document associated with an identity.
-
-#### Purpose
-
-This capability is used to:
-- Retrieve the public key(s) associated with an identity
-- Get information about authentication methods and service endpoints
-- Verify the current status of an identity
-
-#### Request Format
-
-```ts
-type ResolveRequest = {
-  did: string  // The DID to resolve
-}
-```
-
-### `/identity/sign`
-
-The sign capability allows the creation of digital signatures using the identity's private key.
-
-#### Purpose
-
-This capability is used to:
-- Sign data to prove identity ownership
-- Authorize operations on spaces or other resources
-- Create delegation chains for capability-based security
-
-#### Request Format
-
-```ts
-type SignRequest = {
-  payload: any,           // The data to sign
-  keyType?: string,       // The type of key to use for signing
-  signatureFormat?: string // The desired signature format
-}
-```
-
-## References
 
 [Irakli Gozalishvili]: https://github.com/gozala
 [Common Tools]: https://commontool.org
