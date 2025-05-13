@@ -166,7 +166,7 @@ Causal references are a fundamental mechanism that enables consistency guarantee
 2. Concurrent updates are detected and handled appropriately
 3. The transaction log maintains a clear causal history
 
-For initial transactions with no predecessors, the causal reference points to a genesis state, which is essentially a retraction with the `cause` field omitted. This genesis state establishes the starting point of the causal chain and provides a consistent reference point for the first mutation.
+For initial transactions with no predecessors, the causal reference points to a [genesis fact]. This genesis fact establishes the starting point of the causal chain and provides a consistent reference point for the first mutation.
 
 #### Concurrent Transaction Handling
 
@@ -270,6 +270,18 @@ type MIME = `${string}/${string}`
 
 The `of` field identifies which resource this fact describes. It MUST be a URI that uniquely identifies the resource. This allows facts to be organized and queried by resource identity.
 
+When implementing resource identifiers for new data being added to the space, we RECOMMEND the following approaches for deterministic identifier generation:
+
+1. When a resource has no ownership requirements, derive a [merkle-reference] from the seed data to create a deterministic identifier and format it as a URI by appending an appropriate protocol prefix.
+
+2. When a resource needs to have an owner, derive the identifier by cryptographically signing the [merkle-reference] of the seed data with the owner's key.
+
+3. When ownership is desired but should not be public, use the [merkle-reference] of the cryptographic signature as the identifier.
+
+For facts about external resources, use the existing canonical URIs for those resources.
+
+These approaches ensure that resource identifiers are consistently generated, verifiable, and appropriate for different ownership models.
+
 ##### `the` - Media Type
 
 The `the` field specifies the [media type] of the fact, defining the semantic meaning and expected structure of the data. Multiple semantically distinct states can be associated with the same resource through different media types:
@@ -285,7 +297,17 @@ The `is` field contains the actual state data for an assertion. Its structure an
 
 The `cause` field contains a [merkle-reference] to the previous fact in this lineage. It creates a causal chain that ensures consistency and tracks the complete revision history.
 
-For initial assertions, the `cause` references a genesis fact that establishes the starting point of the causal chain. This genesis fact is essentially a retraction with matching `the` and `of` values but with the `cause` field omitted, representing the initial absence of the fact.
+For initial assertions, the `cause` references a [genesis fact][genesis fact] that establishes the starting point of the causal chain.
+
+#### Genesis Facts
+
+A genesis fact represents the initial state of a resource before any assertions have been made. It establishes the starting point of the causal chain and provides a consistent reference point for the first assertion.
+
+Genesis facts are essentially retractions with matching `the` and `of` values but with the `cause` field omitted, representing the initial absence of data for a resource. Since genesis facts do not assert any state, they serve as logical foundations that claim "no prior state existed."
+
+> ℹ️ Each resource has its own unique genesis fact (determined by its specific `the` and `of` values), rather than all facts sharing a common genesis. This ensures proper lineage tracking on a per-resource basis.
+
+When creating the first assertion for a resource, its `cause` field should reference this genesis fact to establish proper lineage.
 
 #### Fact Causal Chain Visualization
 
@@ -318,7 +340,8 @@ graph
 In this diagram:
 
 - The subgraph title shows both `the` and `of` fields for the facts
-- Node contents show the fact structure with explicit `is` field (empty objects `{}` for genesis nodes and retractions that have no `is` value)
+- Node contents show the remaining fact structure beyond what's captured in the title (i.e., fields other than `the` and `of`)
+- Empty objects `{}` represent genesis nodes and retractions that have no `is` value
 - Arrows point from newer facts to older ones (showing causal references)
 - Assertions (green) add or update state, while retractions (red with empty `{}` content) delete it
 - The genesis fact (semi-transparent with empty `{}` content) establishes the starting point
@@ -455,15 +478,17 @@ This capability is used to:
 #### Request Format
 
 ```ts
+type Anything = '_'
+
 type Query = {
   select: Selector
   since?: number
 }
 
-type Selector {
-  [of: URI]: {
-    [the: string]: {
-      [cause: string]: {
+type Selector = {
+  [of: URI | Anything]: {
+    [the: MIME | Anything]: {
+      [cause: Reference | Anything]: {
         is?: {}
       }
     }
@@ -471,7 +496,19 @@ type Selector {
 }
 ```
 
-The `select` field defines which facts to retrieve, based on resource (`of`), media type (`the`), and optionally causal reference.
+The `select` field defines which facts to retrieve, based on resource (`of`), media type (`the`), and optionally causal reference. Each selector component can use `'_'` as a wildcard to match any value for that field, allowing for flexible querying patterns.
+
+Using wildcards enables powerful querying capabilities:
+
+For example:
+- `{ "_": { "_": { "_": {} } } }` - matches all facts in the space
+- `{ "user:alice": { "_": { "_": {} } } }` - matches all facts about the resource "user:alice" regardless of media type
+- `{ "_": { "application/json": { "_": {} } } }` - matches all JSON facts for any resource
+- `{ "_": { "_": { "ba4jca7rv4dlr5n5uuvcz7iht5omeukavhzbbpmc5w4hcp6dl4y5sfkp5": {} } } }` - matches all facts with a specific causal reference
+
+Omitting inner components in a selector is equivalent to using `'_'` in their place. For example, `{ "user:alice": {} }` is equivalent to `{ "user:alice": { "_": { "_": {} } } }`. The explicit `'_'` wildcard is most useful when you need an outer component to match anything while requiring an inner component to have an exact value, such as `{ "_": { "application/json": { "uuid:5d59a2ff-5aa7-419d-8b3a-547063a2fd23": {} } } }`.
+
+Wildcards can be combined with specific values in different components to create targeted queries that focus on particular aspects while being flexible about others.
 
 The `since` field can limit results to facts derived from transactions after a specific logical time point in the transaction log, allowing retrieval of state at different points in time.
 
@@ -582,3 +619,4 @@ While `/memory/query` implements a traditional poll-based approach requiring cli
 [space]:#Spaces_User-Controlled_Data_Environments
 [commit]:#commits
 [fact]:#Derived_Fact_State
+[genesis fact]: #genesis-facts
