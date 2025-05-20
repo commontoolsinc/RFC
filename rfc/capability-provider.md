@@ -83,7 +83,7 @@ Providers represent programs compiled into JavaScript modules also asserted thro
 ```json
 {
   "the": "application/javascript",
-  "of": "route:547063a2fd23#fetch",
+  "of": "route:547063a2fd23",
   "is": "export function* fetch(request) { return new Response('Hello!', {status: 200}); }"
 }
 ```
