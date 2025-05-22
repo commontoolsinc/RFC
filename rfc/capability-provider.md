@@ -14,14 +14,14 @@
 
 This document describes the **Cohesion Protocol**, which enables entities in a space to define rules for interpreting facts. The protocol defines two types of rules:
 
-1. **Deductive Rules**: Act as fact pre-processors. They run on assertion, can query (memory) space and return derived facts that are included in the same transaction.
-2. **Reactive Rules**: Act as fact post-processors. They are scheduled to run asynchronously, can query (memory) space, and perform system-provided effects. They return derived facts that are asserted in a follow-up transaction while maintaining consistency guarantees.
+1. **Deductive Rules**: Act as fact pre-processors. They run synchronously with transaction, can query space data, and return derived facts that are included in the same transaction.
+2. **Reactive Rules**: Act as fact post-processors. They are scheduled to run asynchronously whith transaction, can query space data, and perform system-provided effects. They return derived facts commited in the follow-up transaction while maintaining consistency guarantees.
 
-The protocol also defines an **HTTP Gateway** mechanism built on top of this protocol that can be utilized for exposing an HTTP interface for user spaces, while maintaining appropriate authorization boundaries.
+The protocol also defines an **HTTP Gateway** mechanism for exposing space over HTTP interface while maintaining appropriate authorization boundaries.
 
-> Enabling the HTTP Gateway requires (out of band) authorization of the principal operating the gateway server (e.g., `did:web:common.tools`) by delegating `/memory/transact` capability to it.
+> Enabling the HTTP Gateway requires out-of-band authorization where the space owner delegates the `/memory/transact` capability on `http+` prefixed entities to the gateway service (e.g., `did:web:common.tools`).
 >
-> This delegation is then used by the gateway service to assert facts containing HTTP request in the value (`is` field), allowing the space to interpret request through deployed rules, forming an interface with the outside world while retaining full control over which parts of the space are accessible and how.
+> This delegation allows the gateway to assert facts on HTTP requests, enabling the space to process web requests through deployed rules. This forms a controlled interface with the outside world while giving space owners full control over which parts of their space are accessible and how they respond to requests.
 
 ## Language
 
@@ -35,77 +35,82 @@ Rules provide the computational substrate of the space.
 
 #### Rule Definition
 
-Rules are entities with an active assertion where
+A rule is defined by an assertion where:
 
-1. Type (`the` field) is the `"application/javascript"`.
-2. Value (`is` field) is the ES module source code.
+1. Type (`the` field) is `"application/javascript"`
+2. Value (`is` field) contains JavaScript code as an ES module
 
-Rules CAN be added to the space by asserting a facts using [memory protocol].
+Rules are added to the space by asserting facts via the [memory protocol].
 
 ### Rule Binding
 
-Rule binding is a fact that maps entity (`of` field) and type (`the` field) to a desired export of the [rule definition] value. It is similar to a setter concept in the programming languages, when matching fact is asserted or retracted mapped rule gets executed.
+A rule binding is a fact that maps an entity (`of` field) and type (`the` field) to a specific rule. It functions similarly to a setter in programming languages - when a matching fact is asserted or retracted, the bound rule is executed.
 
-Rule MUST be considered bound if space has corresponding **rule binding** - an active fact where:
+A rule is considered bound when the space contains an active fact where:
 
-1. Entity (`of` field) is same as of asserted fact.
-1. Type (`the` field) is the same as of asserted fact with a `/` prefix.
-2. Value (`is` field) is a URI for a rule entity in the space with an optional `#` fragment.
-  - If there is a `#` fragment it denotes export name of the rule module.
-  - If `#` fragment is omitted the `default` export of ther rule module is implied.
+1. Entity (`of` field) matches the entity of the asserted fact
+2. Type (`the` field) matches the type of the asserted fact with a `/` prefix
+3. Value (`is` field) is a URI of the rule entity in the space, with an optional `#` fragment
+   - If a `#` fragment is present, it specifies which export of the rule module to invoke
+   - If no `#` fragment is provided, the `default` export of the rule module is used
 
 ### Rule Execution
 
-Rule MUST be executed when fact matching a binding is asserted or retracted. Valid implementation of the protocol MUST do perform following steps when facts are transected into memory
+A rule MUST be executed when a fact matching its binding is asserted or retracted. A valid implementation of the protocol MUST perform the following steps when facts are transacted into memory:
 
-1. Resolve **rule binding** by selecting a fact where
-  - Entity (`of` field) is matches asserted fact entity.
-  - Type (`the` field) is matches asserted fact entity with `/` prefix.
-  - Value (`is` field) is URI.
+1. Resolve the **rule binding** by finding a fact where:
+   - Entity (`of` field) matches the asserted fact's entity
+   - Type (`the` field) matches the asserted fact's type with a `/` prefix
+   - Value (`is` field) is a URI
 
-2. Resolve **rule** by selecting a fact where
-  - Entity (`of` field) matches resolved rule binding value (`is` field) without `#` framgent.
-  - Type (`the` field) matches `application/javascript`.
-  - Value (`the` field) matches ES module source code.
+2. Resolve bound **rule** by finding a fact where:
+   - Entity (`of` field) matches the rule binding's value (`is` field) without any `#` fragment
+   - Type (`the` field) is `application/javascript`
+   - Value (`is` field) contains ES module source code
 
-3. Inovke **rule** by performing following steps
-  - Evaluating ES module in a sandboxed JS runtime.
-  - If rule binding value (`is` field) has `#` fragment call module export, with a matching name of the fragment, passing asserted/retracted fact.
-  - If rule binding value (`is` field) has no `#` fragment, call `default` module export passing asserted/retracted fact.
-  - Run returned generator folling rule execution steps until it returns or throws an exception.
+3. Invoke the **rule** by:
+   - Evaluating the ES module in a sandboxed JS runtime
+   - If the rule binding value has a `#` fragment, invoking the named export
+   - If the rule binding has no `#` fragment, invoking the `default` export
+   - Passing the asserted/retracted fact as an argument
+   - Running the returned generator following the appropriate rule execution steps until it returns or throws
 
 
 ### Rule Execution Steps
 
 #### Deductive Rule Execution Steps
 
-Deductive rules MUST be run in a **synchronously** inside a transaction call. If rule yields `{ memory/query: args }` command runtime MUST perform `/memory/query` invocation defined by [memory protocol] with the `args`. Execution MUST be resumed with a result of the invocation.
+Deductive rules MUST be executed **synchronously** within the triggering transaction. When a rule yields:
 
-If rule yields command other than `/memory/query` runtime MUST resume execution with an exception, allowing rule to `catch` and continue execution.
+- `{ memory/query: args }` - The runtime MUST perform a `/memory/query` invocation as defined by [memory protocol] using the provided `args`. Execution MUST resume with the query result.
 
-If rule throws an exception transaction MUST fail with thrown error.
+- Any other command - The runtime MUST resume execution with an exception, allowing the rule to `catch` and continue execution if desired.
 
-If rule returns a value it MUST be interpreted as derived facts. All derived facts MUST be included in the transaction. Derived assertion with same entity and attribute as fact that caused execution SHOULD NOT cause recursive rule call, instead it should assert fact directly.
+If the rule throws an exception, the transaction MUST fail with the thrown error.
+
+When a rule returns a value, it MUST be interpreted as a collection of derived facts. All these derived facts MUST be included in the current transaction. A derived fact with the same entity and attribute as the triggering fact MUST NOT cause a recursive rule call - instead, it should be asserted as a fact.
 
 
 
 #### Reactive Rule Execution Steps
 
-Reactive rules MUST be executed **asynchronously** outside a transaction call. If rule yields `{ memory/query: args }` command runtime MUST perform `/memory/query` invocation defined by [memory protocol] with the provided `args`. Execution MUST be resumed with a result of the invocation.
+Reactive rules MUST be executed **asynchronously** concurrently with a triggering transaction. When a rule yields:
 
-Unlike deductive rules, reactive rules MAY yield other, potentially effectful, commands provided by the system. Runtime MUST perform commands using corresponding [UCAN Invocation] with `cmd` corresponding to a key of the yielded object, and value as `args`. Runtime MAY choose which commands reacitve rule are given access to.
+- `{ memory/query: args }` - The runtime MUST perform a `/memory/query` invocation as defined by [memory protocol] using the provided `args`. Execution MUST resume with the query result.
 
-> ⚠️ It is RECOMMENDED that runtime does not provide commands able to transact changes in the space as those would bypass consistency guarantees.
+- Other commands - Unlike deductive rules, reactive rules MAY yield other commands, including effectful ones provided by the system. The runtime MUST perform these commands using corresponding [UCAN Invocation] where the command key becomes `cmd` and the value becomes `args`. The runtime MAY restrict which commands reactive rules can access.
 
-Reactive rules sterm mus be run with an **optimistic concurrency**:
+> ⚠️ It is RECOMMENDED that runtimes do not provide commands to transact changes in the space, as they can violate consistency guarantees.
 
-1. Runtime MUST record each facts queried during execution
-1. Returned value MUST be interpreted as derived facts.
-1. If any of the queried fact has changed rule execution MUST be retried with an exponential beckoff.
-1. If max retry limit is reached runtum SHOULD block transactions for facts queried by rule to gurantee consistency.
-1. Derived facts MUST be transacted.
+Reactive rules MUST be executed with **optimistic concurrency**:
 
-This ensures **causal consistency** guarantee - changes will be applied correctly once all dependencies are stable.
+1. The runtime MUST record all facts queried during execution
+2. The returned value MUST be interpreted as a collection of derived facts
+3. Before committing, if any queried facts have changed, rule execution MUST be retried with exponential backoff
+4. If the maximum retry limit is reached, the runtime SHOULD block transactions for facts queried by the rule to guarantee consistency of derived facts
+5. Derived facts MUST be transacted in a separate transaction
+
+This approach ensures **causal consistency** - changes will be applied correctly once all dependencies are stable.
 
 
 **Deductive Rule Example**:
@@ -205,21 +210,19 @@ This ensures **causal consistency** guarantee - changes will be applied correctl
 
 ### HTTP Gateway
 
-The HTTP Gateway is a service that maps HTTP requests to corresponding rules and triggers them using authorization delegated from the space. This allows spaces to bind rules to desired HTTP endpoints, forming a critical bridge between the Common Fabric and outside systems, enabling entities to participate in the web ecosystem.
+The HTTP Gateway is a service that maps HTTP requests to rules bound to special `http+`-prefixed entities. It acts using authorization delegated by the space owner, creating a bridge between the Common Fabric and external web systems.
 
-The gateway maps HTTP requests to rule triggering on entities with the `http+` prefix.
+This gateway enables spaces to:
 
-Through the HTTP Gateway, entities can:
+1. Expose HTTP interfaces with custom request handling
+2. Process and transform web inputs using rules
+3. Access and manipulate space data through standard query mechanisms
+4. Return HTTP responses to external clients
+5. Bridge between the Common Fabric and external web services
 
-1. Receive and process external HTTP requests with custom logic
-2. Apply rules to HTTP inputs to pre-process or transform them
-3. Access and manipulate data by yielding queries or effectful commands
-4. Respond with HTTP responses
-5. Bridge between Common Fabric and external services
+To enable the HTTP Gateway, a space owner must delegate to the gateway service (typically `did:web:common.tools`) the capability to invoke `/memory/transact` on `http+`-prefixed entities. This delegation allows the gateway to assert facts representing HTTP requests, while maintaining proper authorization boundaries.
 
-To enable the HTTP Gateway, a space needs to delegate to `did:web:common.tools` the capability to invoke `/memory/transact` on `http+` prefixed entities. This delegation enables the gateway service to route HTTP requests to the appropriate rules, empowering space owners to customize how their spaces interface with the outside world while retaining control over which parts are accessible without authorization.
-
-The HTTP Gateway exposes rules through entities prefixed with `http+` as shown in the example below:
+Space owners retain full control over which parts of their space are exposed and how requests are processed. The HTTP Gateway operates on specially designated entities with the `http+` prefix, as shown in the example below:
 
 ```js
 {
@@ -290,36 +293,38 @@ The HTTP Gateway exposes rules through entities prefixed with `http+` as shown i
 
 ##### URL to Entity Mapping
 
-Routes are mapped to entities as follows:
-- **Entity in Space**: `/did:key:space/note:5d59a2ff/...` maps to the `http+note:5d59a2ff` entity
-- **Space itself**: `/did:key:space/whatever/else` maps to the `http+did:key:space` entity
+The gateway maps URLs to entities following these rules:
 
-The gateway asserts fact on the entity if path component after DID contains `:` character. Otherwise gateway asserts fact of the space entity.
+- **Entity-specific Routes**: `/did:key:space/note:5d59a2ff/path/to` maps to the `http+note:5d59a2ff` entity
+- **Space-level Routes**: `/did:key:space/whatever/else` maps to the `http+did:key:space` entity
+
+The gateway determines the target entity by checking if the path component after the DID contains a `:` character. If it does, the gateway asserts a fact on that specific entity. Otherwise, it asserts a fact on the space entity itself.
 
 ##### Content-Type to Type Mapping
 
-The HTTP request's Content-Type header determines type (`the` field) of the fact.
+The HTTP request's Content-Type header determines the type (`the` field) of the asserted fact:
 - The Content-Type is normalized to lowercase
-
+- This normalized value becomes the fact's type
 
 ##### Request Processing Flow
 
-When an HTTP request arrives at the gateway to derives corresponding fact as follows:
+When an HTTP request arrives at the gateway, it processes the request as follows:
 
-1. Identifies target entity from the URL path (using mapping rules above) and sets it to the fact entity (`of` field).
-2. It normalizes `content-type` header of the request and sets it to the fact type (`the` field).
-3. It derives unique temporary URI for the HTTP request and sets it to the fact value (`is` field).
+1. It identifies the target entity from the URL path using the mapping rules above and sets this as the fact's entity (`of` field)
+2. It normalizes the Content-Type header of the request and sets this as the fact's type (`the` field)
+3. It creates a unique temporary URI to represent the HTTP request and sets this as the fact's value (`is` field)
 
-Derived fact is asserted only if space contains rule binding for the derived fact, otherwise fact is not asserted and 404 - Not Found response is returned. If rule binding is found requset is blocked until triggered rule transacts response.
+The gateway only asserts this derived fact if the space contains a rule binding that matches it. If no matching rule binding is found, the fact is not asserted and a 404 - Not Found response is returned. If a matching rule binding is found, the request is blocked until the triggered rule processes the request and provides a response.
 
-### Rational
+### Rationale
 
-#### Generators
+#### Generator Pattern
 
-This generator pattern offers several advantages over regular functions:
+The generator pattern used by rules offers several advantages over regular functions:
 
-1. **Suspension and Resumption**: Allows execution to be suspended and resumed when results are available. Generator can even be rerun in then new session by replaying results from last run.
-1. **Transparent effect tracking**: All side effects are explicitly yielded as data
+1. **Suspension and Resumption**: Allows execution to be suspended at yield points and resumed when results are available. Generators can even be rerun in a new session by replaying the results from the previous run.
+
+2. **Transparent Effect Tracking**: All effects are explicitly yielded as data, making them visible, auditable, and controllable.
 
 
 #### Database Analogies
@@ -343,25 +348,27 @@ These analogies can help developers understand how and when to use each type of 
 ## Security and Privacy Considerations
 
 1. **Sandboxed Execution**: Rules run in isolated environments with:
-   - Resource limits (CPU, memory, timeout)
+   - Resource limits (CPU, memory, execution time)
    - No direct file system or network access
-   - No await or promises
-   - Access limited to yielding commands
+   - No `await` or promises (only generator-based concurrency)
+   - Access limited to explicitly yielded commands
    - Clearly defined input and output boundaries
-   - Different execution contexts based on rule type (synchronous for deductive, asynchronous for reactive)
+   - Different execution contexts for deductive rules (synchronous) and reactive rules (asynchronous)
 
 2. **Permission Model**:
-   - By default, the system enforces authorization for all rule triggering
-   - Only space owners or delegates can bind rules
-   - Deductive rules have read-only access to the space
-   - Reactive rules can perform changes with consistency guarantees
+   - The system enforces authorization for all rule triggering by default
+   - Only space owners or explicitly delegated entities can bind rules
+   - Deductive rules are limited to read-only access to the space
+   - Reactive rules can perform effects while maintaining consistency guarantees
+   - HTTP Gateway access is controlled through explicit delegation
 
 3. **Code Security**:
    - Rule generator functions are validated before execution
    - All dependencies must be bundled with the rule implementation
    - Runtime errors are contained within the rule execution environment
-   - Commands are explicitly yielded and controlled
-   - Reactive operations are transactional and atomic
+   - All effects are explicitly yielded as commands and can be monitored
+   - Reactive operations are transactional and provide atomic guarantees
+   - Consistency checking prevents operations based on stale data
 
 
 [Irakli Gozalishvili]: https://github.com/gozala
