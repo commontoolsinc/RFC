@@ -163,11 +163,6 @@ This approach ensures **causal consistency** - changes will be applied correctly
 
 ```ts
 {
-<<<<<<< HEAD
-  "the": "application/javascript",
-  "of": "route:547063a2fd23",
-  "is": "export function* fetch(request) { return new Response('Hello!', {status: 200}); }"
-=======
   "iss": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
   "sub": "did:key:z6MkffDZCkCTWreg8868fG1FGFogcJj5X6PY93pPcWDn9bob",
   "cmd": "/memory/transact",
@@ -204,7 +199,6 @@ This approach ensures **causal consistency** - changes will be applied correctly
   "prf": [
     {"/": "zdpuAzx4sBrBCabrZZqXgvK3NDzh7Mf5mKbG11aBkkMCdLtCp"}
   ]
->>>>>>> 42ce53e (overhaul the protocol)
 }
 ```
 
