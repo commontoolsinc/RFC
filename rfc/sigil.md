@@ -9,13 +9,12 @@
 ## Authors
 
 - [Bernhard Seefeld], [Common Tools]
-- [Irakli Gozalishvili], [Common Tools]
 
 ## Abstract
 
 This RFC extends the [Memory Protocol] with a standardized system for describing references across facts boundaries in user-controlled spaces. The sigil protocol adopts the [DAG-JSON] convention, using the `/` field to encode custom data types.
 
-Sigils provide a unified mechanism for expressing mutable redirects, transparent aliases, binary content references, computed data sources, and relational queries within facts, enabling sophisticated data modeling while preserving the causal integrity of the memory protocol.
+- Sigils provide a unified mechanism for expressing mutable redirects, transparent cursors, binary content references, computed data sources, and relational queries within facts, enabling sophisticated data modeling while preserving the causal integrity of the memory protocol.
 
 ## Language
 
@@ -61,7 +60,7 @@ All sigils follow this general pattern within a fact's `is` field:
 ```
 
 The sigil type identifier consists of two components:
-- **Sigil name**: Identifies the kind of reference (e.g., `link`, `alias`, `blob`)
+- **Sigil name**: Identifies the kind of reference (e.g., `query`, `cursor`, `blob`)
 - **Version**: Follows semver convention with omitted components (e.g., `@1`, `@1.2`, `@2.0.1`)
 
 This naming convention allows implementations to support multiple versions of the same sigil type and provides a clear upgrade path as the protocol evolves. Version components default to `0` when omitted (e.g., `@1` equals `@1.0.0`).
@@ -70,9 +69,9 @@ This naming convention allows implementations to support multiple versions of th
 
 ## Core Sigil Types
 
-### Link Sigil (`link@1`)
+### Query Sigil (`query@1`)
 
-The link sigil provides references to a JSON value held by another fact at a given path. If path is omitted it references whole JSON value - `is` field of the target fact.
+The query sigil provides references to a JSON value held by another fact at a given path. If path is omitted it references whole JSON value - `is` field of the target fact. When a query sigil is overwritten, the sigil itself is replaced, not the target fact.
 
 #### Fields
 
@@ -84,8 +83,8 @@ The link sigil provides references to a JSON value held by another fact at a giv
 #### TypeScript Definition
 
 ```typescript
-type LinkSigil = {
-  "link@1": {
+type QuerySigil = {
+  "query@1": {
     the: MIME
     of: URI
     path?: JSONPath
@@ -96,7 +95,9 @@ type LinkSigil = {
 
 #### Resolution Behavior
 
-Link sigils resolve to the current value at the specified location within the target fact's `is` field. When the target fact changes, all references automatically reflect the new value.
+Query sigils resolve to the current value at the specified location within the target fact's `is` field. When the target fact changes, all references automatically reflect the new value.
+
+**Write Behavior**: When a query sigil is assigned a new value, the sigil itself is overwritten and replaced with the new value. The target fact remains unchanged.
 
 #### Example
 
@@ -108,7 +109,7 @@ Link sigils resolve to the current value at the specified location within the ta
     "name": "Alice Smith",
     "manager": {
       "/": {
-        "link@1": {
+        "query@1": {
           "the": "application/json",
           "of": "user:bob",
           "path": ["name"]
@@ -120,9 +121,9 @@ Link sigils resolve to the current value at the specified location within the ta
 }
 ```
 
-### Alias Sigil (`alias@1`)
+### Cursor Sigil (`cursor@1`)
 
-The alias sigil provides transparent references to a JSON value held by another fact at a given path. Unlike links, aliases allow writes to pass through to the underlying target fact, making them transparent to mutations. If path is omitted it references the whole JSON value - `is` field of the target fact.
+The cursor sigil provides transparent references to a JSON value held by another fact at a given path, acting like a permanent redirect. Unlike queries, cursors are followed first before writing - when you write to a cursor, the write operation is redirected to the underlying target fact, making cursors transparent to mutations. If path is omitted it references the whole JSON value - `is` field of the target fact.
 
 #### Fields
 
@@ -135,8 +136,8 @@ The alias sigil provides transparent references to a JSON value held by another 
 #### TypeScript Definition
 
 ```typescript
-type AliasSigil = {
-  "alias@1": {
+type CursorSigil = {
+  "cursor@1": {
     the: MIME
     of: URI
     path?: JSONPath
@@ -149,8 +150,8 @@ type AliasSigil = {
 #### Resolution Behavior
 
 - **Reads**: Return the current value from the target fact's location
-- **Writes**: Modify the target fact directly, making the alias transparent to mutations while maintaining causal consistency
-- **Validation**: If schema is provided, validate writes against it before applying
+- **Writes**: Follow the alias to the target fact first, then modify the target fact directly, making the alias transparent to mutations while maintaining causal consistency. This is like a permanent redirect for write operations.
+- **Validation**: If schema is provided, validate writes against it before applying to the target fact
 
 #### Example
 
@@ -161,7 +162,7 @@ type AliasSigil = {
   "is": {
     "currentUser": {
       "/": {
-        "alias@1": {
+        "cursor@1": {
           "the": "application/json",
           "of": "session:current",
           "path": ["user"],
@@ -178,6 +179,99 @@ type AliasSigil = {
   "cause": "ca5kbd8su5emr6n6vvwdz8jiu6pnfvlbwizccqnd6x5idq7em5z6tfls6"
 }
 ```
+
+## Query vs Cursor: Write Behavior Comparison
+
+The key difference between Query and Cursor sigils lies in their write behavior:
+
+### Query Sigil Write Behavior
+
+When you write to a Query sigil, you **replace the sigil itself** with the new value:
+
+```json
+// Initial state
+{
+  "the": "application/json",
+  "of": "user:alice",
+  "is": {
+    "manager": {
+      "/": {
+        "query@1": {
+          "the": "application/json",
+          "of": "user:bob",
+          "path": ["name"]
+        }
+      }
+    }
+  }
+}
+
+// After writing "Charlie" to manager field
+{
+  "the": "application/json",
+  "of": "user:alice",
+  "is": {
+    "manager": "Charlie"  // Query sigil replaced with literal value
+  }
+}
+```
+
+The target fact (`user:bob`) remains unchanged.
+
+### Cursor Sigil Write Behavior
+
+When you write to a Cursor sigil, the write **follows the cursor** to modify the target fact:
+
+```json
+// Initial state
+{
+  "the": "application/json",
+  "of": "user:alice",
+  "is": {
+    "manager": {
+      "/": {
+        "cursor@1": {
+          "the": "application/json",
+          "of": "user:bob",
+          "path": ["name"]
+        }
+      }
+    }
+  }
+}
+
+// After writing "Charlie" to manager field
+// The cursor remains, but user:bob fact is modified
+{
+  "the": "application/json",
+  "of": "user:alice",
+  "is": {
+    "manager": {
+      "/": {
+        "cursor@1": {
+          "the": "application/json",
+          "of": "user:bob",
+          "path": ["name"]
+        }
+      }
+    }
+  }
+}
+
+// And user:bob fact is updated:
+{
+  "the": "application/json",
+  "of": "user:bob",
+  "is": {
+    "name": "Charlie"  // Target fact modified
+  }
+}
+```
+
+### Use Cases
+
+- **Query sigils**: Use when you want a mutable reference that can be replaced with direct values
+- **Cursor sigils**: Use when you want transparent redirection, like permanent redirects or symbolic links
 
 ### Blob Sigil (`blob@1`)
 
@@ -453,11 +547,11 @@ Sigils can be nested within other sigils to create complex reference patterns:
 ```json
 {
   "/": {
-    "alias@1": {
+    "cursor@1": {
       "the": "application/json",
       "of": {
         "/": {
-          "link@1": {
+          "query@1": {
             "the": "application/json",
             "of": "config:current",
             "path": ["primaryDatabase"]
@@ -486,7 +580,7 @@ Multiple sigils can work together within and across facts to create sophisticate
           "args": {
             "period": {
               "/": {
-                "link@1": {
+                "query@1": {
                   "the": "application/json",
                   "of": "settings:dashboard",
                   "path": ["selectedPeriod"]
@@ -541,15 +635,28 @@ Implementations MUST:
 4. **Error handling**: Provide clear errors for broken references or invalid sigils
 5. **Caching**: Implement efficient caching strategies for resolved sigil values
 
-### Write Transparency for Aliases
+### Write Handling
 
-For alias sigils, implementations MUST:
+Implementations MUST handle writes differently for Query and Cursor sigils:
 
-1. **Detect writes**: Identify when alias targets are being modified
-2. **Pass through**: Route write operations to the underlying target fact
-3. **Validate**: Apply schema validation if specified
-4. **Maintain causality**: Ensure writes maintain proper fact causal chains
-5. **Transaction integrity**: Process alias writes within proper memory protocol transactions
+#### Query Sigil Writes
+
+For query sigils, implementations MUST:
+
+1. **Replace sigil**: When a query sigil is written to, replace the entire sigil with the new value
+2. **Preserve target**: The target fact referenced by the query remains unchanged
+3. **Local mutation**: The write affects only the containing fact, not the referenced fact
+
+#### Cursor Sigil Writes
+
+For cursor sigils, implementations MUST:
+
+1. **Follow cursor**: When a cursor sigil is written to, follow the cursor to the target fact first
+2. **Route writes**: Redirect write operations to the underlying target fact at the specified path
+3. **Preserve cursor**: The cursor sigil itself remains unchanged in the containing fact
+4. **Validate**: Apply schema validation if specified before writing to target
+5. **Maintain causality**: Ensure writes maintain proper fact causal chains for the target fact
+6. **Transaction integrity**: Process cursor writes within proper memory protocol transactions
 
 ### Reactive Updates
 
@@ -594,7 +701,7 @@ Implementations MAY choose to support subsets of sigil types based on their spec
 
 ### Version Evolution
 
-Sigil types include version suffixes (e.g., `link-v1`) to enable backward-compatible evolution:
+Sigil types include version suffixes (e.g., `query@1`) to enable backward-compatible evolution:
 
 1. **New versions**: Can add fields or change behavior while maintaining old version support
 2. **Deprecation**: Old versions should be supported during transition periods
@@ -606,10 +713,10 @@ Implementations can use TypeScript's union types to support multiple versions:
 
 ```typescript
 // Support for multiple versions of the same sigil
-type LinkSigilAny = LinkSigil1 | LinkSigil2 // when @2 is introduced
+type QuerySigilAny = QuerySigil1 | QuerySigil2 // when @2 is introduced
 
-type LinkSigil1 = {
-  "link@1": {
+type QuerySigil1 = {
+  "query@1": {
     the: MIME
     of: URI
     path?: JSONPath
@@ -618,8 +725,8 @@ type LinkSigil1 = {
 }
 
 // Future version example
-type LinkSigil2 = {
-  "link@2": {
+type QuerySigil2 = {
+  "query@2": {
     the: MIME
     of: URI
     path?: JSONPath
@@ -631,13 +738,13 @@ type LinkSigil2 = {
 }
 
 // Version-aware sigil processing
-function processLinkSigil(sigil: LinkSigilAny): unknown {
-  if ("link@1" in sigil) {
-    return processLink1(sigil["link@1"])
-  } else if ("link@2" in sigil) {
-    return processLink2(sigil["link@2"])
+function processQuerySigil(sigil: QuerySigilAny): unknown {
+  if ("query@1" in sigil) {
+    return processQuery1(sigil["query@1"])
+  } else if ("query@2" in sigil) {
+    return processQuery2(sigil["query@2"])
   }
-  throw new Error("Unsupported link sigil version")
+  throw new Error("Unsupported query sigil version")
 }
 ```
 
@@ -657,7 +764,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
     "title": "Project Status Report",
     "author": {
       "/": {
-        "link@1": {
+        "query@1": {
           "the": "application/json",
           "of": "user:current",
           "path": ["name"]
@@ -727,7 +834,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
             "name": "Alice Smith",
             "profile": {
               "/": {
-                "link@1": {
+                "query@1": {
                   "the": "application/json",
                   "of": "profile:alice-public"
                 }
