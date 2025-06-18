@@ -127,12 +127,12 @@ Query sigils resolve to the current value at the specified location within the t
 
 ### Cursor Sigil (`cursor@1`)
 
-The cursor sigil provides transparent references to a JSON value held by another fact at a given path, acting like a permanent redirect. Unlike queries, cursors are followed first before writing - when you write to a cursor, the write operation is redirected to the underlying target fact, making cursors transparent to mutations. If path is omitted it references the whole JSON value - `is` field of the target fact.
+The cursor sigil provides transparent references to a JSON value held by another fact at a given path, acting like a permanent redirect. Unlike queries, cursors are followed first before writing - when you write to a cursor, the write operation is redirected to the underlying target fact, making cursors transparent to mutations. If `at` is omitted it references the whole JSON value - `is` field of the target fact. If `the` and `of` are omitted, they default to the containing fact's `the` and `of` values.
 
 #### Fields
 
-- `the` (required): Media type of the target fact
-- `of` (required): Resource URI of the target fact
+- `the` (optional): Media type of the target fact. Defaults to containing fact's `the` value
+- `of` (optional): Resource URI of the target fact. Defaults to containing fact's `of` value
 - `at` (optional): Path into the target fact's `is` field
 - `from` (optional): Target space DID
 - `schema` (optional): JSON Schema for validation
@@ -142,8 +142,8 @@ The cursor sigil provides transparent references to a JSON value held by another
 ```typescript
 type CursorSigil = {
   "cursor@1": {
-    the: MIME
-    of: URI
+    the?: MIME    // defaults to containing fact's `the` value
+    of?: URI      // defaults to containing fact's `of` value
     at?: JSONPath
     from?: SpaceDID
     schema?: JSONSchema7
@@ -183,6 +183,30 @@ type CursorSigil = {
   "cause": "ca5kbd8su5emr6n6vvwdz8jiu6pnfvlbwizccqnd6x5idq7em5z6tfls6"
 }
 ```
+
+#### Example with Default Values
+
+When `the` and `of` are omitted, they default to the containing fact's values:
+
+```json
+{
+  "the": "application/json",
+  "of": "user:alice", 
+  "is": {
+    "name": "Alice Smith",
+    "nickname": {
+      "/": {
+        "cursor@1": {
+          "at": ["displayName"]
+        }
+      }
+    }
+  },
+  "cause": "da6lce9tv6fnr7o7wwxez9kjv7qogwmcxjacdrod7y6jer8fn6a7ugmt7"
+}
+```
+
+In this example, the cursor references the same fact (`user:alice` with `application/json`) at the `displayName` path, effectively creating an alias within the same fact.
 
 ## Query vs Cursor: Write Behavior Comparison
 
