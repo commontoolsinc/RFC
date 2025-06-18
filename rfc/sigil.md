@@ -73,9 +73,9 @@ Sigils are resolved by the [Schema Query Protocol] to reduce roundtrips when fol
 
 ## Core Sigil Types
 
-### Query Sigil (`query@1`)
+### Embed Sigil (`embed@1`)
 
-The query sigil provides references to a JSON value held by another fact at a given path. If path is omitted it references whole JSON value - `is` field of the target fact. When a query sigil is overwritten, the sigil itself is replaced, not the target fact.
+The embed sigil provides references to a JSON value held by another fact at a given path. If path is omitted it references whole JSON value - `is` field of the target fact. When an embed sigil is overwritten, the sigil itself is replaced, not the target fact.
 
 #### Fields
 
@@ -87,8 +87,8 @@ The query sigil provides references to a JSON value held by another fact at a gi
 #### TypeScript Definition
 
 ```typescript
-type QuerySigil = {
-  "query@1": {
+type EmbedSigil = {
+  "embed@1": {
     the: MIME
     of: URI
     at?: JSONPath
@@ -99,9 +99,9 @@ type QuerySigil = {
 
 #### Resolution Behavior
 
-Query sigils resolve to the current value at the specified location within the target fact's `is` field. When the target fact changes, all references automatically reflect the new value.
+Embed sigils resolve to the current value at the specified location within the target fact's `is` field. When the target fact changes, all references automatically reflect the new value.
 
-**Write Behavior**: When a query sigil is assigned a new value, the sigil itself is overwritten and replaced with the new value. The target fact remains unchanged.
+**Write Behavior**: When an embed sigil is assigned a new value, the sigil itself is overwritten and replaced with the new value. The target fact remains unchanged.
 
 #### Example
 
@@ -113,7 +113,7 @@ Query sigils resolve to the current value at the specified location within the t
     "name": "Alice Smith",
     "manager": {
       "/": {
-        "query@1": {
+        "embed@1": {
           "the": "application/json",
           "of": "user:bob",
           "at": ["name"]
@@ -125,9 +125,9 @@ Query sigils resolve to the current value at the specified location within the t
 }
 ```
 
-### Cursor Sigil (`cursor@1`)
+### Mount Sigil (`mount@1`)
 
-The cursor sigil provides transparent references to a JSON value held by another fact at a given path, acting like a permanent redirect. Unlike queries, cursors are followed first before writing - when you write to a cursor, the write operation is redirected to the underlying target fact, making cursors transparent to mutations. If `at` is omitted it references the whole JSON value - `is` field of the target fact. If `the` and `of` are omitted, they default to the containing fact's `the` and `of` values.
+The mount sigil provides mutable references to a JSON value held by another fact at a given path, acting like a permanent redirect. Unlike embeds, mounts are followed first before writing - when you write to a mount, the write operation is redirected to the underlying target fact, making mounts transparent to mutations. If `at` is omitted it references the whole JSON value - `is` field of the target fact. If `the` and `of` are omitted, they default to the containing fact's `the` and `of` values.
 
 #### Fields
 
@@ -140,8 +140,8 @@ The cursor sigil provides transparent references to a JSON value held by another
 #### TypeScript Definition
 
 ```typescript
-type CursorSigil = {
-  "cursor@1": {
+type MountSigil = {
+  "mount@1": {
     the?: MIME    // defaults to containing fact's `the` value
     of?: URI      // defaults to containing fact's `of` value
     at?: JSONPath
@@ -166,7 +166,7 @@ type CursorSigil = {
   "is": {
     "currentUser": {
       "/": {
-        "cursor@1": {
+        "mount@1": {
           "the": "application/json",
           "of": "session:current",
           "at": ["user"],
@@ -191,12 +191,12 @@ When `the` and `of` are omitted, they default to the containing fact's values:
 ```json
 {
   "the": "application/json",
-  "of": "user:alice", 
+  "of": "user:alice",
   "is": {
     "name": "Alice Smith",
     "nickname": {
       "/": {
-        "cursor@1": {
+        "mount@1": {
           "at": ["displayName"]
         }
       }
@@ -206,15 +206,15 @@ When `the` and `of` are omitted, they default to the containing fact's values:
 }
 ```
 
-In this example, the cursor references the same fact (`user:alice` with `application/json`) at the `displayName` path, effectively creating an alias within the same fact.
+In this example, the mount references the same fact (`user:alice` with `application/json`) at the `displayName` path, effectively creating an alias within the same fact.
 
-## Query vs Cursor: Write Behavior Comparison
+## Embed vs Mount: Write Behavior Comparison
 
-The key difference between Query and Cursor sigils lies in their write behavior:
+The key difference between Embed and Mount sigils lies in their write behavior:
 
-### Query Sigil Write Behavior
+### Embed Sigil Write Behavior
 
-When you write to a Query sigil, you **replace the sigil itself** with the new value:
+When you write to an Embed sigil, you **replace the sigil itself** with the new value:
 
 ```json
 // Initial state
@@ -224,7 +224,7 @@ When you write to a Query sigil, you **replace the sigil itself** with the new v
   "is": {
     "manager": {
       "/": {
-        "query@1": {
+        "embed@1": {
           "the": "application/json",
           "of": "user:bob",
           "at": ["name"]
@@ -239,16 +239,16 @@ When you write to a Query sigil, you **replace the sigil itself** with the new v
   "the": "application/json",
   "of": "user:alice",
   "is": {
-    "manager": "Charlie"  // Query sigil replaced with literal value
+    "manager": "Charlie"  // Embed sigil replaced with literal value
   }
 }
 ```
 
 The target fact (`user:bob`) remains unchanged.
 
-### Cursor Sigil Write Behavior
+### Mount Sigil Write Behavior
 
-When you write to a Cursor sigil, the write **follows the cursor** to modify the target fact:
+When you write to a Mount sigil, the write **follows the mount** to modify the target fact:
 
 ```json
 // Initial state
@@ -258,9 +258,9 @@ When you write to a Cursor sigil, the write **follows the cursor** to modify the
   "is": {
     "manager": {
       "/": {
-        "cursor@1": {
+        "mount@1": {
           "the": "application/json",
-          "of": "user:bob", 
+          "of": "user:bob",
           "at": ["name"]
         }
       }
@@ -269,17 +269,17 @@ When you write to a Cursor sigil, the write **follows the cursor** to modify the
 }
 
 // After writing "Charlie" to manager field
-// The cursor remains, but user:bob fact is modified
+// The mount remains, but user:bob fact is modified
 {
   "the": "application/json",
   "of": "user:alice",
   "is": {
     "manager": {
       "/": {
-        "cursor@1": {
+        "mount@1": {
           "the": "application/json",
           "of": "user:bob",
-          "path": ["name"]
+          "at": ["name"]
         }
       }
     }
@@ -298,8 +298,8 @@ When you write to a Cursor sigil, the write **follows the cursor** to modify the
 
 ### Use Cases
 
-- **Query sigils**: Use when you want a mutable reference that can be replaced with direct values
-- **Cursor sigils**: Use when you want transparent redirection, like permanent redirects or symbolic links
+- **Embed sigils**: Use when you want a mutable reference that can be replaced with direct values
+- **Mount sigils**: Use when you want transparent redirection, like permanent redirects or symbolic links
 
 ### Blob Sigil (`blob@1`)
 
@@ -517,8 +517,8 @@ The merge sigil provides composition of JSON values by merging data from multipl
 
 #### Fields
 
-- `sources` (required): Array of values to merge. Can contain literal values, query sigils, or any other sigils
-- `from` (optional): Default space DID for any query sigils that don't specify their own
+- `sources` (required): Array of values to merge. Can contain literal values, embed sigils, or any other sigils
+- `from` (optional): Default space DID for any embed sigils that don't specify their own
 
 #### TypeScript Definition
 
@@ -550,7 +550,7 @@ Sigils in the sources array are resolved first, then the resolved values are mer
           "sources": [
             {
               "/": {
-                "query@1": {
+                "embed@1": {
                   "the": "application/json",
                   "of": "config:base"
                 }
@@ -558,8 +558,8 @@ Sigils in the sources array are resolved first, then the resolved values are mer
             },
             {
               "/": {
-                "query@1": {
-                  "the": "application/json", 
+                "embed@1": {
+                  "the": "application/json",
                   "of": "config:environment"
                 }
               }
@@ -586,11 +586,11 @@ Sigils can be nested within other sigils to create complex reference patterns:
 ```json
 {
   "/": {
-    "cursor@1": {
+    "mount@1": {
       "the": "application/json",
       "of": {
         "/": {
-          "query@1": {
+          "embed@1": {
             "the": "application/json",
             "of": "config:current",
             "at": ["primaryDatabase"]
@@ -619,7 +619,7 @@ Multiple sigils can work together within and across facts to create sophisticate
           "args": {
             "period": {
               "/": {
-                "query@1": {
+                "embed@1": {
                   "the": "application/json",
                   "of": "settings:dashboard",
                   "at": ["selectedPeriod"]
@@ -642,7 +642,7 @@ Multiple sigils can work together within and across facts to create sophisticate
 Sigils operate entirely within the `is` field of facts, preserving the memory protocol's core structure:
 
 - `the` field remains the media type of the containing fact
-- `of` field remains the resource URI of the containing fact  
+- `of` field remains the resource URI of the containing fact
 - `cause` field maintains causal consistency as defined by the memory protocol
 - Sigils reference other facts using their `{the, of}` coordinates
 
@@ -680,26 +680,26 @@ Implementations MUST:
 
 ### Write Handling
 
-Implementations MUST handle writes differently for Query and Cursor sigils:
+Implementations MUST handle writes differently for Embed and Mount sigils:
 
-#### Query Sigil Writes
+#### Embed Sigil Writes
 
-For query sigils, implementations MUST:
+For embed sigils, implementations MUST:
 
-1. **Replace sigil**: When a query sigil is written to, replace the entire sigil with the new value
-2. **Preserve target**: The target fact referenced by the query remains unchanged
+1. **Replace sigil**: When an embed sigil is written to, replace the entire sigil with the new value
+2. **Preserve target**: The target fact referenced by the embed remains unchanged
 3. **Local mutation**: The write affects only the containing fact, not the referenced fact
 
-#### Cursor Sigil Writes
+#### Mount Sigil Writes
 
-For cursor sigils, implementations MUST:
+For mount sigils, implementations MUST:
 
-1. **Follow cursor**: When a cursor sigil is written to, follow the cursor to the target fact first
+1. **Follow mount**: When a mount sigil is written to, follow the mount to the target fact first
 2. **Route writes**: Redirect write operations to the underlying target fact at the specified path
-3. **Preserve cursor**: The cursor sigil itself remains unchanged in the containing fact
+3. **Preserve mount**: The mount sigil itself remains unchanged in the containing fact
 4. **Validate**: Apply schema validation if specified before writing to target
 5. **Maintain causality**: Ensure writes maintain proper fact causal chains for the target fact
-6. **Transaction integrity**: Process cursor writes within proper memory protocol transactions
+6. **Transaction integrity**: Process mount writes within proper memory protocol transactions
 
 ### Reactive Updates
 
@@ -744,7 +744,7 @@ Implementations MAY choose to support subsets of sigil types based on their spec
 
 ### Version Evolution
 
-Sigil types include version suffixes (e.g., `query@1`) to enable backward-compatible evolution:
+Sigil types include version suffixes (e.g., `embed@1`) to enable backward-compatible evolution:
 
 1. **New versions**: Can add fields or change behavior while maintaining old version support
 2. **Deprecation**: Old versions should be supported during transition periods
@@ -756,10 +756,10 @@ Implementations can use TypeScript's union types to support multiple versions:
 
 ```typescript
 // Support for multiple versions of the same sigil
-type QuerySigilAny = QuerySigil1 | QuerySigil2 // when @2 is introduced
+type EmbedSigilAny = EmbedSigil1 | EmbedSigil2 // when @2 is introduced
 
-type QuerySigil1 = {
-  "query@1": {
+type EmbedSigil1 = {
+  "embed@1": {
     the: MIME
     of: URI
     at?: JSONPath
@@ -768,8 +768,8 @@ type QuerySigil1 = {
 }
 
 // Future version example
-type QuerySigil2 = {
-  "query@2": {
+type EmbedSigil2 = {
+  "embed@2": {
     the: MIME
     of: URI
     at?: JSONPath
@@ -781,13 +781,13 @@ type QuerySigil2 = {
 }
 
 // Version-aware sigil processing
-function processQuerySigil(sigil: QuerySigilAny): unknown {
-  if ("query@1" in sigil) {
-    return processQuery1(sigil["query@1"])
-  } else if ("query@2" in sigil) {
-    return processQuery2(sigil["query@2"])
+function processEmbedSigil(sigil: EmbedSigilAny): unknown {
+  if ("embed@1" in sigil) {
+    return processEmbed1(sigil["embed@1"])
+  } else if ("embed@2" in sigil) {
+    return processEmbed2(sigil["embed@2"])
   }
-  throw new Error("Unsupported query sigil version")
+  throw new Error("Unsupported embed sigil version")
 }
 ```
 
@@ -807,10 +807,10 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
     "title": "Project Status Report",
     "author": {
       "/": {
-        "query@1": {
+        "embed@1": {
           "the": "application/json",
           "of": "user:current",
-          "path": ["name"]
+          "at": ["name"]
         }
       }
     },
@@ -842,7 +842,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
           "sources": [
             {
               "/": {
-                "query@1": {
+                "embed@1": {
                   "the": "application/json",
                   "of": "config:default"
                 }
@@ -883,7 +883,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
             "name": "Alice Smith",
             "profile": {
               "/": {
-                "query@1": {
+                "embed@1": {
                   "the": "application/json",
                   "of": "profile:alice-public"
                 }
