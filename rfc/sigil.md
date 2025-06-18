@@ -509,6 +509,207 @@ When `content` is inline bytes, the content type defaults to `application/octet-
 }
 ```
 
+### Computational Sigils
+
+Computational sigils use mutable references to create dynamic relationships, computed values, and data transformations based on other facts.
+
+#### Charm Sigil (`charm@1`)
+
+The charm sigil provides references to TypeScript modules that compute values based on input data and write results to specified outputs. It enables computed values within facts by executing TypeScript code with specified imports, inputs, and outputs.
+
+#### Fields
+
+- `language` (required): Programming language, currently only `"typescript"` is supported
+- `imports` (required): Record mapping import names to immutable references containing the module code
+- `exports` (required): Object with `"."` property pointing to the entry point module via immutable reference
+- `main` (optional): Name of the main export function, defaults to `"default"`
+- `input` (required): Arguments passed to the main function, can be a record of named inputs or a single JSON value, supporting embed sigils for dynamic data
+- `output` (required): Destination where the return value is written, can be a record of named outputs or a single destination, supporting embed sigils for dynamic targets
+
+#### TypeScript Definition
+
+```typescript
+type CharmSigil = {
+  "charm@1": {
+    language: "typescript"
+    imports: Record<string, Reference>
+    exports: { ".": Reference }
+    main?: string
+    input: Record<string, EmbedSigil | JSONValue> | JSONValue
+    output: Record<string, EmbedSigil | JSONValue> | JSONValue
+  }
+}
+```
+
+#### Resolution Behavior
+
+Charms resolve by loading the TypeScript module from the entry point reference, importing any specified dependencies, calling the main function with the provided input, and writing the result to the specified output destination. The TypeScript code executes in a sandboxed environment with access only to the explicitly imported modules.
+
+#### Example
+
+```json
+{
+  "the": "application/json",
+  "of": "report:monthly",
+  "is": {
+    "totalSales": {
+      "/": {
+        "charm@1": {
+          "language": "typescript",
+          "imports": {
+            "lodash": { "/": "ba4jca7rv4dlr5n5uuvcz7iht5omeukavhzbbpmc5w4hcp6dl4y5sfkp5" }
+          },
+          "exports": {
+            ".": { "/": "ca5kbd8su5emr6n6vvwdz8jiu6pnfvlbwizccqnd6x5idq7em5z6tfls6" }
+          },
+          "main": "calculateTotal",
+          "input": {
+            "salesData": {
+              "/": {
+                "embed@1": {
+                  "accept": "application/json",
+                  "source": "sales:oeu242"
+                }
+              }
+            }
+          },
+          "output": {
+            "/": {
+              "embed@1": {
+                "accept": "application/json",
+                "source": "report:monthly",
+                "path": ["totalAmount"]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "cause": "da6lce9tv6fnr7o7wwxez9kjv7qogwmcxjacdrod7y6jer8fn6a7ugmt7"
+}
+```
+
+#### Backlink Sigil (`backlink@1`)
+
+The backlink sigil provides dynamic collections of facts that reference a specific target fact. It enables reverse relationship queries by finding all facts that contain references to the target at a specified path, with optional filtering conditions.
+
+#### Fields
+
+- `target` (required): Fact selector for the entity being referenced
+- `path` (optional): Path within referencing facts to check
+- `conditions` (optional): Additional filtering conditions
+- `space` (optional): Space to search in
+
+#### TypeScript Definition
+
+```typescript
+type BacklinkSigil = {
+  "backlink@1": {
+    target: FactCoordinate
+    path?: JSONPath
+    conditions?: Record<string, unknown>
+    space?: SpaceDID
+  }
+}
+```
+
+#### Resolution Behavior
+
+Backlinks resolve to an array of facts that contain references to the target fact at the specified path.
+
+#### Example
+
+```json
+{
+  "the": "application/json",
+  "of": "user:alice",
+  "is": {
+    "followers": {
+      "/": {
+        "backlink@1": {
+          "target": {
+            "accept": "application/json",
+            "source": "user:alice"
+          },
+          "path": ["following"],
+          "conditions": {
+            "active": true
+          }
+        }
+      }
+    }
+  },
+  "cause": "ea7mdf0uw7gos8p8xxydz0klw8rpgxndykaedspd8z7kfs9go7b8vhmsu8"
+}
+```
+
+#### Merge Sigil (`merge@1`)
+
+The merge sigil provides composition of JSON values by merging data from multiple sources. For objects, sources are merged with later sources taking precedence over earlier ones (key ordering matters). For arrays, sources are concatenated in order. This enables flexible fact composition and data inheritance.
+
+#### Fields
+
+- `sources` (required): Array of values to merge. Can contain literal values, embed sigils, or any other sigils
+- `space` (optional): Default space DID for any embed sigils that don't specify their own
+
+#### TypeScript Definition
+
+```typescript
+type MergeSigil = {
+  "merge@1": {
+    sources: unknown[]
+    space?: SpaceDID
+  }
+}
+```
+
+#### Resolution Behavior
+
+For objects: Merges all sources in order, with later sources taking precedence over earlier ones when keys conflict.
+For arrays: Concatenates all sources in order.
+Sigils in the sources array are resolved first, then the resolved values are merged/concatenated with literal values.
+
+#### Example
+
+```json
+{
+  "the": "application/json",
+  "of": "config:production",
+  "is": {
+    "settings": {
+      "/": {
+        "merge@1": {
+          "sources": [
+            {
+              "/": {
+                "embed@1": {
+                  "accept": "application/json",
+                  "source": "config:base"
+                }
+              }
+            },
+            {
+              "/": {
+                "embed@1": {
+                  "accept": "application/json",
+                  "source": "config:environment"
+                }
+              }
+            },
+            {
+              "debug": false,
+              "apiUrl": "https://api.production.com"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "cause": "fa8neh1vx8hpt9q9yyzer1lmx9sqhyoezlbfespezz8lgtsafp8cwiosu9"
+}
+```
+
 
 ## Integration with Memory Protocol
 
