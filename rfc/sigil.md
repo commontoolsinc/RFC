@@ -8,6 +8,7 @@
 
 ## Authors
 
+- [Bernhard Seefeld], [Common Tools]
 - [Irakli Gozalishvili], [Common Tools]
 
 ## Abstract
@@ -52,35 +53,26 @@ All sigils follow this general pattern within a fact's `is` field:
 ```json
 {
   "/": {
-    "<sigil-type>": {
+    "<sigil-name>@<version>": {
       // sigil-specific fields
     }
   }
 }
 ```
 
-The `<sigil-type>` identifies the specific kind of reference, determining both the structure of the contained metadata and the resolution behavior.
+The sigil type identifier consists of two components:
+- **Sigil name**: Identifies the kind of reference (e.g., `link`, `alias`, `blob`)
+- **Version**: Follows semver convention with omitted components (e.g., `@1`, `@1.2`, `@2.0.1`)
+
+This naming convention allows implementations to support multiple versions of the same sigil type and provides a clear upgrade path as the protocol evolves. Version components default to `0` when omitted (e.g., `@1` equals `@1.0.0`).
+
+
 
 ## Core Sigil Types
 
-### Link Sigil (`link-v1`)
+### Link Sigil (`link@1`)
 
-The link sigil provides basic cross-fact references with optional path navigation within the target fact's data.
-
-#### Structure
-
-```json
-{
-  "/": {
-    "link-v1": {
-      "the": "<media-type>",
-      "of": "<resource-uri>",
-      "path": ["field", "nested", "0"],
-      "space": "<space-did>"
-    }
-  }
-}
-```
+The link sigil provides references to a JSON value held by another fact at a given path. If path is omitted it references whole JSON value - `is` field of the target fact.
 
 #### Fields
 
@@ -88,6 +80,19 @@ The link sigil provides basic cross-fact references with optional path navigatio
 - `of` (required): Resource URI of the target fact
 - `path` (optional): Array of strings/numbers for navigating into the target fact's `is` field
 - `space` (optional): DID of the space containing the target fact. Defaults to current space
+
+#### TypeScript Definition
+
+```typescript
+type LinkSigil = {
+  "link@1": {
+    the: MIME
+    of: URI
+    path?: JSONPath
+    space?: SpaceDID
+  }
+}
+```
 
 #### Resolution Behavior
 
@@ -103,7 +108,7 @@ Link sigils resolve to the current value at the specified location within the ta
     "name": "Alice Smith",
     "manager": {
       "/": {
-        "link-v1": {
+        "link@1": {
           "the": "application/json",
           "of": "user:bob",
           "path": ["name"]
@@ -115,25 +120,9 @@ Link sigils resolve to the current value at the specified location within the ta
 }
 ```
 
-### Alias Sigil (`alias-v1`)
+### Alias Sigil (`alias@1`)
 
-Aliases create transparent references that behave like queries for reads but allow writes to pass through to the underlying target fact.
-
-#### Structure
-
-```json
-{
-  "/": {
-    "alias-v1": {
-      "the": "<media-type>",
-      "of": "<resource-uri>",
-      "path": ["field", "nested"],
-      "space": "<space-did>",
-      "schema": { /* JSON Schema */ }
-    }
-  }
-}
-```
+The alias sigil provides transparent references to a JSON value held by another fact at a given path. Unlike links, aliases allow writes to pass through to the underlying target fact, making them transparent to mutations. If path is omitted it references the whole JSON value - `is` field of the target fact.
 
 #### Fields
 
@@ -142,6 +131,20 @@ Aliases create transparent references that behave like queries for reads but all
 - `path` (optional): Path into the target fact's `is` field
 - `space` (optional): Target space DID
 - `schema` (optional): JSON Schema for validation
+
+#### TypeScript Definition
+
+```typescript
+type AliasSigil = {
+  "alias@1": {
+    the: MIME
+    of: URI
+    path?: JSONPath
+    space?: SpaceDID
+    schema?: JSONSchema7
+  }
+}
+```
 
 #### Resolution Behavior
 
@@ -158,7 +161,7 @@ Aliases create transparent references that behave like queries for reads but all
   "is": {
     "currentUser": {
       "/": {
-        "alias-v1": {
+        "alias@1": {
           "the": "application/json",
           "of": "session:current",
           "path": ["user"],
@@ -176,83 +179,106 @@ Aliases create transparent references that behave like queries for reads but all
 }
 ```
 
-### Blob Sigil (`blob-v1`)
+### Blob Sigil (`blob@1`)
 
-Blob sigils reference binary data stored as facts with media type information, extending the [Binary Data Support] for the memory protocol.
-
-#### Structure
-
-```json
-{
-  "/": {
-    "blob-v1": {
-      "type": "image/png",
-      "content": { "/": { "bytes": "iVBORw0KGgo..." } }
-    }
-  }
-}
-```
+The blob sigil provides references to binary data stored as another fact with a corresponding media type information. It enables referencing binary content stored as separate facts, extending the [Binary Data Support] for the memory protocol.
 
 #### Fields
 
-- `type` (optional): Media type of the binary data. Defaults to `application/octet-stream`
-- `content` (required): Binary data in [DAG-JSON bytes] format
+- `the` (optional): Media type of the binary data. Defaults to `application/octet-stream`
+- `of` (required): Entity identifier for the blob fact
+
+#### TypeScript Definition
+
+```typescript
+type BlobSigil = {
+  "blob@1": {
+    the?: MIME // defaults to application/octet-stream
+    of: URI
+  }
+}
+```
 
 #### Resolution Behavior
 
-Blob sigils resolve to the binary content with associated media type metadata. In environments that support it, they MAY resolve to native blob objects.
+Blob sigils resolve by referencing binary data stored in another fact identified by the `of` field. The `the` field specifies the expected media type of the target fact. In environments that support it, they SHOULD resolve to native `Blob` instances.
 
 #### Relationship to Binary Facts
 
-Blob sigils complement the memory protocol's binary fact support by providing inline binary references, while binary facts store large binary content as separate facts with proper media types.
+Blob sigils work directly with the memory protocol's binary fact support by referencing facts that contain binary data. This approach enables efficient storage and reuse of binary content across multiple references while maintaining proper media type information.
 
-### File Sigil (`file-v1`)
-
-File sigils extend blob sigils with filesystem metadata, useful for representing files within facts.
-
-#### Structure
+#### Example
 
 ```json
 {
-  "/": {
-    "file-v1": {
-      "type": "image/png",
-      "name": "profile-photo.png",
-      "lastModified": 1697409438000,
-      "content": { "/": { "bytes": "iVBORw0KGgo..." } }
+  "the": "application/json",
+  "of": "user:alice",
+  "is": {
+    "name": "Alice Smith",
+    "avatar": {
+      "/": {
+        "blob@1": {
+          "the": "image/png",
+          "of": "attachment:avatar-alice-2024"
+        }
+      }
     }
-  }
+  },
+  "cause": "ba4jca7rv4dlr5n5uuvcz7iht5omeukavhzbbpmc5w4hcp6dl4y5sfkp5"
 }
 ```
+
+### File Sigil (`file@1`)
+
+The file sigil provides references to binary data with filesystem metadata including filename and modification time. It extends the blob sigil concept with additional file-specific properties, useful for representing files within facts.
 
 #### Fields
 
-- `type` (optional): Media type. Defaults to `application/octet-stream`
+- `the` (optional): Media type. Defaults to `application/octet-stream`
+- `of` (optional): Entity identifier for the file/blob fact
 - `name` (required): Filename
-- `lastModified` (optional): Unix timestamp of last modification
-- `content` (required): Binary data in [DAG-JSON bytes] format
 
-### Charm Sigil (`charm-v1`)
+#### TypeScript Definition
 
-Charms reference computational recipes that describe how data is derived from other facts, enabling computed facts within the memory protocol.
-
-#### Structure
-
-```json
-{
-  "/": {
-    "charm-v1": {
-      "spell": "<spell-uri>",
-      "args": { /* spell arguments */ },
-      "sources": [
-        {"the": "application/json", "of": "sales:*"},
-        {"the": "application/json", "of": "config:rates"}
-      ],
-      "space": "<space-did>"
-    }
+```typescript
+type FileSigil = {
+  "file@1": {
+    the?: MIME    // defaults to application/octet-stream
+    of?: URI      // Entity identifier for the file / blob
+    name: string  // File name
   }
 }
 ```
+
+#### Resolution Behavior
+
+File sigils resolve by referencing binary data stored in another fact (when `of` is specified) with filesystem metadata. The `name` field provides the filename property. In environments that support it, they SHOULD resolve to native `File` instances that extend `Blob` with additional file metadata.
+
+#### Example
+
+```json
+{
+  "the": "application/json",
+  "of": "document:report-2024",
+  "is": {
+    "title": "Annual Report",
+    "attachment": {
+      "/": {
+        "file@1": {
+          "the": "application/pdf",
+          "of": "blob:report-pdf-2024",
+          "name": "annual-report-2024.pdf"
+        }
+      }
+    }
+  },
+  "cause": "ca5kbd8su5emr6n6vvwdz8jiu6pnfvlbwizccqnd6x5idq7em5z6tfls6"
+}
+```
+
+### Charm Sigil (`charm@1`)
+
+The charm sigil provides references to computational recipes (spells) that describe how data is derived from other facts. It enables computed values within facts by executing spells with specified arguments and source fact dependencies.
 
 #### Fields
 
@@ -260,6 +286,25 @@ Charms reference computational recipes that describe how data is derived from ot
 - `args` (optional): Arguments passed to the spell
 - `sources` (optional): Array of fact selectors indicating source facts used in computation
 - `space` (optional): Space containing the source facts
+
+#### TypeScript Definition
+
+```typescript
+type CharmSigil = {
+  "charm@1": {
+    spell: URI
+    args?: Record<string, unknown>
+    sources?: FactCoordinate[]
+    space?: SpaceDID
+  }
+}
+
+type FactCoordinate = {
+  the: MIME
+  of: URI
+  space?: SpaceDID
+}
+```
 
 #### Resolution Behavior
 
@@ -274,7 +319,7 @@ Charms resolve by executing the referenced spell with the provided arguments and
   "is": {
     "totalSales": {
       "/": {
-        "charm-v1": {
+        "charm@1": {
           "spell": "sum",
           "args": {
             "field": "amount"
@@ -290,27 +335,9 @@ Charms resolve by executing the referenced spell with the provided arguments and
 }
 ```
 
-### Backlink Sigil (`backlink-v1`)
+### Backlink Sigil (`backlink@1`)
 
-Backlinks create dynamic collections of facts that reference a specific target, enabling reverse relationship queries.
-
-#### Structure
-
-```json
-{
-  "/": {
-    "backlink-v1": {
-      "target": {
-        "the": "<target-media-type>",
-        "of": "<target-resource-uri>"
-      },
-      "path": ["field", "reference"],
-      "conditions": { /* additional filters */ },
-      "space": "<space-did>"
-    }
-  }
-}
-```
+The backlink sigil provides dynamic collections of facts that reference a specific target fact. It enables reverse relationship queries by finding all facts that contain references to the target at a specified path, with optional filtering conditions.
 
 #### Fields
 
@@ -318,6 +345,19 @@ Backlinks create dynamic collections of facts that reference a specific target, 
 - `path` (optional): Path within referencing facts to check
 - `conditions` (optional): Additional filtering conditions
 - `space` (optional): Space to search in
+
+#### TypeScript Definition
+
+```typescript
+type BacklinkSigil = {
+  "backlink@1": {
+    target: FactCoordinate
+    path?: JSONPath
+    conditions?: Record<string, unknown>
+    space?: SpaceDID
+  }
+}
+```
 
 #### Resolution Behavior
 
@@ -332,7 +372,7 @@ Backlinks resolve to an array of facts that contain references to the target fac
   "is": {
     "followers": {
       "/": {
-        "backlink-v1": {
+        "backlink@1": {
           "target": {
             "the": "application/json",
             "of": "user:alice"
@@ -349,27 +389,9 @@ Backlinks resolve to an array of facts that contain references to the target fac
 }
 ```
 
-### Spread Sigil (`spread-v1`)
+### Spread Sigil (`spread@1`)
 
-Spread sigils simulate JavaScript-like spread operators for objects and arrays, enabling composition of facts.
-
-#### Structure
-
-```json
-{
-  "/": {
-    "spread-v1": {
-      "source": {
-        "the": "<source-media-type>",
-        "of": "<source-resource-uri>"
-      },
-      "path": ["field"],
-      "additions": { /* additional fields */ },
-      "space": "<space-did>"
-    }
-  }
-}
-```
+The spread sigil provides composition of JSON values by merging data from another fact with additional fields. It simulates JavaScript-like spread operators for objects and arrays, enabling fact composition and data inheritance.
 
 #### Fields
 
@@ -377,6 +399,19 @@ Spread sigils simulate JavaScript-like spread operators for objects and arrays, 
 - `path` (optional): Path to the source data within the fact's `is` field
 - `additions` (optional): Additional fields to merge
 - `space` (optional): Source space DID
+
+#### TypeScript Definition
+
+```typescript
+type SpreadSigil = {
+  "spread@1": {
+    source: FactCoordinate
+    path?: JSONPath
+    additions?: Record<string, unknown>
+    space?: SpaceDID
+  }
+}
+```
 
 #### Resolution Behavior
 
@@ -392,7 +427,7 @@ For arrays: Concatenates source fact data with additional items.
   "is": {
     "settings": {
       "/": {
-        "spread-v1": {
+        "spread@1": {
           "source": {
             "the": "application/json",
             "of": "config:base"
@@ -418,11 +453,11 @@ Sigils can be nested within other sigils to create complex reference patterns:
 ```json
 {
   "/": {
-    "alias-v1": {
+    "alias@1": {
       "the": "application/json",
       "of": {
         "/": {
-          "link-v1": {
+          "link@1": {
             "the": "application/json",
             "of": "config:current",
             "path": ["primaryDatabase"]
@@ -446,12 +481,12 @@ Multiple sigils can work together within and across facts to create sophisticate
   "is": {
     "currentPeriod": {
       "/": {
-        "charm-v1": {
+        "charm@1": {
           "spell": "dateRange",
           "args": {
             "period": {
               "/": {
-                "link-v1": {
+                "link@1": {
                   "the": "application/json",
                   "of": "settings:dashboard",
                   "path": ["selectedPeriod"]
@@ -565,6 +600,47 @@ Sigil types include version suffixes (e.g., `link-v1`) to enable backward-compat
 2. **Deprecation**: Old versions should be supported during transition periods
 3. **Migration tools**: Implementations SHOULD provide utilities for upgrading sigil versions
 
+#### TypeScript Version Support
+
+Implementations can use TypeScript's union types to support multiple versions:
+
+```typescript
+// Support for multiple versions of the same sigil
+type LinkSigilAny = LinkSigil1 | LinkSigil2 // when @2 is introduced
+
+type LinkSigil1 = {
+  "link@1": {
+    the: MIME
+    of: URI
+    path?: JSONPath
+    space?: SpaceDID
+  }
+}
+
+// Future version example
+type LinkSigil2 = {
+  "link@2": {
+    the: MIME
+    of: URI
+    path?: JSONPath
+    space?: SpaceDID
+    // hypothetical new fields
+    cache?: boolean
+    timeout?: number
+  }
+}
+
+// Version-aware sigil processing
+function processLinkSigil(sigil: LinkSigilAny): unknown {
+  if ("link@1" in sigil) {
+    return processLink1(sigil["link@1"])
+  } else if ("link@2" in sigil) {
+    return processLink2(sigil["link@2"])
+  }
+  throw new Error("Unsupported link sigil version")
+}
+```
+
 ### Legacy Fact Support
 
 Existing facts without sigils remain fully compatible. Sigils are additive and don't break existing fact functionality.
@@ -581,7 +657,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
     "title": "Project Status Report",
     "author": {
       "/": {
-        "link-v1": {
+        "link@1": {
           "the": "application/json",
           "of": "user:current",
           "path": ["name"]
@@ -590,16 +666,16 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
     },
     "logo": {
       "/": {
-        "file-v1": {
-          "name": "company-logo.png",
-          "type": "image/png",
-          "content": { "/": { "bytes": "iVBORw0KGgo..." } }
+        "file@1": {
+          "the": "image/png",
+          "of": "blob:company-logo-2024",
+          "name": "company-logo.png"
         }
       }
     },
     "metrics": {
       "/": {
-        "charm-v1": {
+        "charm@1": {
           "spell": "aggregateMetrics",
           "sources": [
             {"the": "application/json", "of": "metrics:*"}
@@ -612,7 +688,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
     },
     "teamSettings": {
       "/": {
-        "spread-v1": {
+        "spread@1": {
           "source": {
             "the": "application/json",
             "of": "config:default"
@@ -625,7 +701,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
     },
     "relatedDocuments": {
       "/": {
-        "backlink-v1": {
+        "backlink@1": {
           "target": {
             "the": "application/json",
             "of": "document:project-status"
@@ -651,7 +727,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
             "name": "Alice Smith",
             "profile": {
               "/": {
-                "link-v1": {
+                "link@1": {
                   "the": "application/json",
                   "of": "profile:alice-public"
                 }
@@ -668,9 +744,9 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
             "bio": "Software Engineer",
             "avatar": {
               "/": {
-                "blob-v1": {
-                  "type": "image/jpeg",
-                  "content": { "/": { "bytes": "/9j/4AAQSkZJRgABAQEASABI..." } }
+                "blob@1": {
+                  "the": "image/jpeg",
+                  "of": "blob:avatar-alice-profile"
                 }
               }
             }
@@ -688,3 +764,4 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
 [Binary Data Support]: ./memory-blobs.md
 [DAG-JSON]: https://ipld.io/specs/codecs/dag-json/spec/
 [DAG-JSON bytes]: https://ipld.io/specs/codecs/dag-json/spec/#bytes
+[Blob]: https://developer.mozilla.org/en-US/docs/Web/API/Blob
