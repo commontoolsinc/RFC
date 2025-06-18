@@ -511,25 +511,21 @@ Backlinks resolve to an array of facts that contain references to the target fac
 }
 ```
 
-### Spread Sigil (`spread@1`)
+### Merge Sigil (`merge@1`)
 
-The spread sigil provides composition of JSON values by merging data from another fact with additional fields. It simulates JavaScript-like spread operators for objects and arrays, enabling fact composition and data inheritance.
+The merge sigil provides composition of JSON values by merging data from multiple sources. For objects, sources are merged with later sources taking precedence over earlier ones (key ordering matters). For arrays, sources are concatenated in order. This enables flexible fact composition and data inheritance.
 
 #### Fields
 
-- `source` (required): Fact selector for the source data
-- `at` (optional): Path to the source data within the fact's `is` field
-- `additions` (optional): Additional fields to merge
-- `from` (optional): Source space DID
+- `sources` (required): Array of values to merge. Can contain literal values, query sigils, or any other sigils
+- `from` (optional): Default space DID for any query sigils that don't specify their own
 
 #### TypeScript Definition
 
 ```typescript
-type SpreadSigil = {
-  "spread@1": {
-    source: FactCoordinate
-    at?: JSONPath
-    additions?: Record<string, unknown>
+type MergeSigil = {
+  "merge@1": {
+    sources: unknown[]
     from?: SpaceDID
   }
 }
@@ -537,8 +533,9 @@ type SpreadSigil = {
 
 #### Resolution Behavior
 
-For objects: Merges source fact data with additions, with additions taking precedence.
-For arrays: Concatenates source fact data with additional items.
+For objects: Merges all sources in order, with later sources taking precedence over earlier ones when keys conflict.
+For arrays: Concatenates all sources in order.
+Sigils in the sources array are resolved first, then the resolved values are merged/concatenated with literal values.
 
 #### Example
 
@@ -549,15 +546,29 @@ For arrays: Concatenates source fact data with additional items.
   "is": {
     "settings": {
       "/": {
-        "spread@1": {
-          "source": {
-            "the": "application/json",
-            "of": "config:base"
-          },
-          "additions": {
-            "debug": false,
-            "apiUrl": "https://api.production.com"
-          }
+        "merge@1": {
+          "sources": [
+            {
+              "/": {
+                "query@1": {
+                  "the": "application/json",
+                  "of": "config:base"
+                }
+              }
+            },
+            {
+              "/": {
+                "query@1": {
+                  "the": "application/json", 
+                  "of": "config:environment"
+                }
+              }
+            },
+            {
+              "debug": false,
+              "apiUrl": "https://api.production.com"
+            }
+          ]
         }
       }
     }
@@ -827,14 +838,20 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
     },
     "teamSettings": {
       "/": {
-        "spread@1": {
-          "source": {
-            "the": "application/json",
-            "of": "config:default"
-          },
-          "additions": {
-            "customizations": true
-          }
+        "merge@1": {
+          "sources": [
+            {
+              "/": {
+                "query@1": {
+                  "the": "application/json",
+                  "of": "config:default"
+                }
+              }
+            },
+            {
+              "customizations": true
+            }
+          ]
         }
       }
     },
