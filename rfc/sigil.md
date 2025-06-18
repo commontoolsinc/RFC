@@ -81,8 +81,8 @@ The query sigil provides references to a JSON value held by another fact at a gi
 
 - `the` (required): Media type of the target fact
 - `of` (required): Resource URI of the target fact
-- `path` (optional): Array of strings/numbers for navigating into the target fact's `is` field
-- `space` (optional): DID of the space containing the target fact. Defaults to current space
+- `at` (optional): Array of strings/numbers for navigating into the target fact's `is` field
+- `from` (optional): DID of the space containing the target fact. Defaults to current space
 
 #### TypeScript Definition
 
@@ -91,8 +91,8 @@ type QuerySigil = {
   "query@1": {
     the: MIME
     of: URI
-    path?: JSONPath
-    space?: SpaceDID
+    at?: JSONPath
+    from?: SpaceDID
   }
 }
 ```
@@ -116,7 +116,7 @@ Query sigils resolve to the current value at the specified location within the t
         "query@1": {
           "the": "application/json",
           "of": "user:bob",
-          "path": ["name"]
+          "at": ["name"]
         }
       }
     }
@@ -133,8 +133,8 @@ The cursor sigil provides transparent references to a JSON value held by another
 
 - `the` (required): Media type of the target fact
 - `of` (required): Resource URI of the target fact
-- `path` (optional): Path into the target fact's `is` field
-- `space` (optional): Target space DID
+- `at` (optional): Path into the target fact's `is` field
+- `from` (optional): Target space DID
 - `schema` (optional): JSON Schema for validation
 
 #### TypeScript Definition
@@ -144,8 +144,8 @@ type CursorSigil = {
   "cursor@1": {
     the: MIME
     of: URI
-    path?: JSONPath
-    space?: SpaceDID
+    at?: JSONPath
+    from?: SpaceDID
     schema?: JSONSchema7
   }
 }
@@ -169,7 +169,7 @@ type CursorSigil = {
         "cursor@1": {
           "the": "application/json",
           "of": "session:current",
-          "path": ["user"],
+          "at": ["user"],
           "schema": {
             "type": "object",
             "properties": {
@@ -203,7 +203,7 @@ When you write to a Query sigil, you **replace the sigil itself** with the new v
         "query@1": {
           "the": "application/json",
           "of": "user:bob",
-          "path": ["name"]
+          "at": ["name"]
         }
       }
     }
@@ -236,8 +236,8 @@ When you write to a Cursor sigil, the write **follows the cursor** to modify the
       "/": {
         "cursor@1": {
           "the": "application/json",
-          "of": "user:bob",
-          "path": ["name"]
+          "of": "user:bob", 
+          "at": ["name"]
         }
       }
     }
@@ -383,7 +383,7 @@ The charm sigil provides references to computational recipes (spells) that descr
 - `spell` (required): URI identifying the computational recipe
 - `args` (optional): Arguments passed to the spell
 - `sources` (optional): Array of fact selectors indicating source facts used in computation
-- `space` (optional): Space containing the source facts
+- `from` (optional): Space containing the source facts
 
 #### TypeScript Definition
 
@@ -393,14 +393,14 @@ type CharmSigil = {
     spell: URI
     args?: Record<string, unknown>
     sources?: FactCoordinate[]
-    space?: SpaceDID
+    from?: SpaceDID
   }
 }
 
 type FactCoordinate = {
   the: MIME
   of: URI
-  space?: SpaceDID
+  from?: SpaceDID
 }
 ```
 
@@ -440,9 +440,9 @@ The backlink sigil provides dynamic collections of facts that reference a specif
 #### Fields
 
 - `target` (required): Fact selector for the entity being referenced
-- `path` (optional): Path within referencing facts to check
+- `at` (optional): Path within referencing facts to check
 - `conditions` (optional): Additional filtering conditions
-- `space` (optional): Space to search in
+- `from` (optional): Space to search in
 
 #### TypeScript Definition
 
@@ -450,9 +450,9 @@ The backlink sigil provides dynamic collections of facts that reference a specif
 type BacklinkSigil = {
   "backlink@1": {
     target: FactCoordinate
-    path?: JSONPath
+    at?: JSONPath
     conditions?: Record<string, unknown>
-    space?: SpaceDID
+    from?: SpaceDID
   }
 }
 ```
@@ -475,7 +475,7 @@ Backlinks resolve to an array of facts that contain references to the target fac
             "the": "application/json",
             "of": "user:alice"
           },
-          "path": ["following"],
+          "at": ["following"],
           "conditions": {
             "active": true
           }
@@ -494,9 +494,9 @@ The spread sigil provides composition of JSON values by merging data from anothe
 #### Fields
 
 - `source` (required): Fact selector for the source data
-- `path` (optional): Path to the source data within the fact's `is` field
+- `at` (optional): Path to the source data within the fact's `is` field
 - `additions` (optional): Additional fields to merge
-- `space` (optional): Source space DID
+- `from` (optional): Source space DID
 
 #### TypeScript Definition
 
@@ -504,9 +504,9 @@ The spread sigil provides composition of JSON values by merging data from anothe
 type SpreadSigil = {
   "spread@1": {
     source: FactCoordinate
-    path?: JSONPath
+    at?: JSONPath
     additions?: Record<string, unknown>
-    space?: SpaceDID
+    from?: SpaceDID
   }
 }
 ```
@@ -558,11 +558,11 @@ Sigils can be nested within other sigils to create complex reference patterns:
           "query@1": {
             "the": "application/json",
             "of": "config:current",
-            "path": ["primaryDatabase"]
+            "at": ["primaryDatabase"]
           }
         }
       },
-      "path": ["connectionString"]
+      "at": ["connectionString"]
     }
   }
 }
@@ -587,7 +587,7 @@ Multiple sigils can work together within and across facts to create sophisticate
                 "query@1": {
                   "the": "application/json",
                   "of": "settings:dashboard",
-                  "path": ["selectedPeriod"]
+                  "at": ["selectedPeriod"]
                 }
               }
             }
@@ -727,8 +727,8 @@ type QuerySigil1 = {
   "query@1": {
     the: MIME
     of: URI
-    path?: JSONPath
-    space?: SpaceDID
+    at?: JSONPath
+    from?: SpaceDID
   }
 }
 
@@ -737,8 +737,8 @@ type QuerySigil2 = {
   "query@2": {
     the: MIME
     of: URI
-    path?: JSONPath
-    space?: SpaceDID
+    at?: JSONPath
+    from?: SpaceDID
     // hypothetical new fields
     cache?: boolean
     timeout?: number
@@ -821,7 +821,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
             "the": "application/json",
             "of": "document:project-status"
           },
-          "path": ["references"]
+          "at": ["references"]
         }
       }
     }
