@@ -14,7 +14,7 @@
 
 This RFC extends the [Memory Protocol] with a standardized system for describing references across facts boundaries in user-controlled spaces. The sigil protocol adopts the [DAG-JSON] convention, using the `/` field to encode custom data types.
 
-- Sigils provide a unified mechanism for expressing mutable redirects, transparent cursors, binary content references, computed data sources, and relational queries within facts, enabling sophisticated data modeling while preserving the causal integrity of the memory protocol.
+Sigils provide a unified mechanism for expressing mutable redirects, transparent cursors, binary content references, computed data sources, and relational queries within facts, enabling sophisticated data modeling while preserving the causal integrity of the memory protocol. Sigils are resolved by the [Schema Query Protocol], which provides the `/memory/graph/query` capability for advanced querying with automatic sigil resolution.
 
 ## Language
 
@@ -31,7 +31,7 @@ Without a standardized cross-fact reference mechanism, applications must impleme
 - Handling binary data and file metadata consistently within facts
 - Building reactive systems that respond to changes in referenced facts
 
-The sigil protocol addresses these needs by providing a type-safe, extensible system for encoding various kinds of references directly within the memory protocol's JSON fact data model.
+The sigil protocol addresses these needs by providing a type-safe, extensible system for encoding various kinds of references directly within the memory protocol's JSON fact data model. Sigils are resolved through the [Schema Query Protocol], enabling applications to work with computed values and relationships without implementing complex resolution logic.
 
 ## Sigil Foundation
 
@@ -64,6 +64,10 @@ The sigil type identifier consists of two components:
 - **Version**: Follows semver convention with omitted components (e.g., `@1`, `@1.2`, `@2.0.1`)
 
 This naming convention allows implementations to support multiple versions of the same sigil type and provides a clear upgrade path as the protocol evolves. Version components default to `0` when omitted (e.g., `@1` equals `@1.0.0`).
+
+## Sigil Resolution
+
+Sigils are resolved by the [Schema Query Protocol] to reduce roundtrips when following references across facts.
 
 
 
@@ -150,7 +154,7 @@ type CursorSigil = {
 #### Resolution Behavior
 
 - **Reads**: Return the current value from the target fact's location
-- **Writes**: Follow the alias to the target fact first, then modify the target fact directly, making the alias transparent to mutations while maintaining causal consistency. This is like a permanent redirect for write operations.
+- **Writes**: Follow the cursor to the target fact first, then modify the target fact directly, making the cursor transparent to mutations while maintaining causal consistency. This is like a permanent redirect for write operations.
 - **Validation**: If schema is provided, validate writes against it before applying to the target fact
 
 #### Example
@@ -603,7 +607,7 @@ Multiple sigils can work together within and across facts to create sophisticate
 Sigils operate entirely within the `is` field of facts, preserving the memory protocol's core structure:
 
 - `the` field remains the media type of the containing fact
-- `of` field remains the resource URI of the containing fact
+- `of` field remains the resource URI of the containing fact  
 - `cause` field maintains causal consistency as defined by the memory protocol
 - Sigils reference other facts using their `{the, of}` coordinates
 
@@ -617,11 +621,15 @@ Sigils integrate seamlessly with the memory protocol's transaction system:
 
 ### Query Integration
 
-Sigils work with the memory protocol's query system:
+Sigils work with both the basic `/memory/query` and advanced `/memory/graph/query` capabilities:
 
-1. **Sigil expansion**: Queries MAY expand sigils during resolution
-2. **Selective resolution**: Queries MAY choose to return sigils unexpanded for efficiency
-3. **Dependency tracking**: Query results can include sigil dependency information
+#### Basic Query Support (`/memory/query`)
+
+Basic queries return sigils in their raw form without following references.
+
+#### Schema Query Support (`/memory/graph/query`)
+
+The [Schema Query Protocol] can follow sigil references and return bundled results to reduce roundtrips.
 
 ## Implementation Requirements
 
@@ -869,6 +877,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
 [Irakli Gozalishvili]: https://github.com/gozala
 [Memory Protocol]: ./memory.md
 [Binary Data Support]: ./memory-blobs.md
+[Schema Query Protocol]: ./schema-query.md
 [DAG-JSON]: https://ipld.io/specs/codecs/dag-json/spec/
 [DAG-JSON bytes]: https://ipld.io/specs/codecs/dag-json/spec/#bytes
 [Blob]: https://developer.mozilla.org/en-US/docs/Web/API/Blob
