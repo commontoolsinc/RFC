@@ -15,7 +15,7 @@
 This RFC extends the [Memory Protocol] with a standardized system for creating references between facts in user-controlled spaces. The protocol defines two fundamental types of references:
 
 1. **Immutable references (by value)**: Use merkle references encoded as [DAG-JSON] links to reference content that never changes
-2. **Mutable references (by address)**: Use `embed` sigils to reference facts that can be updated over time
+- **Mutable references (by address)**: Use `link` sigils to reference facts that can be updated over time
 
 These reference types enable sophisticated data modeling including binary content references, computed data sources, and relational queries within facts, while preserving the causal integrity of the memory protocol. References are resolved by the [Schema Query Protocol], which provides the `/memory/graph/query` capability for advanced querying with automatic resolution.
 
@@ -58,14 +58,14 @@ Immutable references use [IPLD Links] to reference the content of a fact's `is` 
 
 ### Mutable References (By Address)
 
-Mutable references use `embed` sigils to reference facts that can be updated over time. These references automatically reflect changes to the target fact:
+Mutable references use `link` sigils to reference facts that can be updated over time. These references automatically reflect changes to the target fact:
 
 ```json
 {
   "/": {
-    "embed@1": {
-      "source": "user:bob",
-      "accept": "application/json",
+    "link@1": {
+      "type": "application/json",
+      "id": "user:bob",
       "path": ["name"]
     }
   }
@@ -95,51 +95,48 @@ References are resolved by the [Schema Query Protocol] to reduce roundtrips when
 
 ## Reference-Based Sigil Types
 
-### Mutable References: Embed (`embed@1`)
+### Mutable References: Link Sigil (`link@1`)
 
-The `embed` sigil provides mutable references to JSON values associated with a fact. If `path` is omitted it references whole JSON value - `is` field of the fact. If `accept` is omitted, it defaults to the type of the embedder (the fact containing the `embed` sigil). If `source` is omitted, it defaults to the URI of the embedder.
+The `link` sigil provides mutable references to JSON values held by other facts. If `path` is omitted it references whole JSON value - `is` field of the target fact. If `accept` is omitted, it defaults to the type of the linker (the fact containing the `link` sigil). If `source` is omitted, it defaults to the id of the linker. Therefore, if both are omitted, it creates a self-reference. The `overwrite` field controls write behavior.
 
-> ℹ️ Therefore `embed` with omitted `accept`, `source` and `path` represents a self-reference.
-
-
-The `replace` field controls write behavior.
+> ℹ️ Therefore `link` with omitted `accept`, `source` and `path` represents a self-reference.
 
 #### Fields
 
-- `source` (optional): Resource URI of the target fact. Defaults to embedder's URI.
-- `accept` (optional): Media type preferences for the target fact, following HTTP [Accept header] semantics. Defaults to embedder's type
+- `source` (optional): Resource URI of the target fact. Defaults to linker's id
+- `accept` (optional): Media type preferences for the target fact, following HTTP Accept header semantics. Defaults to linker's type
 - `path` (optional): Array of strings/numbers for navigating into the target fact's `is` field.
-- `space` (optional): DID of the space containing the target fact. Defaults to the embedder's space.
-- `schema` (optional): JSON Schema embed SHOULD conform to.
-- `replace` (optional): Controls write behavior - `"this"` (default) or `"embed"`
+- `space` (optional): DID of the space containing the target fact. Defaults to current space
+- `schema` (optional): JSON Schema for validation
+- `overwrite` (optional): Controls write behavior - `"this"` (default) or `"redirect"`
 
 #### TypeScript Definition
 
 ```typescript
-type EmbedSigil = {
-  "embed@1": {
-    source?: URI      // defaults to embedder resource URI
-    accept?: string   // HTTP Accept header format, defaults to embedder's type
+type LinkSigil = {
+  "link@1": {
+    source?: URI      // defaults to linker resource URI
+    accept?: string   // HTTP Accept header format, defaults to linker's type
     path?: JSONPath
-    schema?: JSONSchema
     space?: SpaceDID
-    replace?: "this" | "source"  // defaults to "this"
+    overwrite?: "this" | "redirect"  // defaults to "this"
+    schema?: JSONSchema
   }
 }
 ```
 
 #### Resolution Behavior
 
-Embed sigils resolve to the current value at the specified location within the target fact's `is` field. When the target fact changes, all references automatically reflect the new value.
+Link sigils resolve to the current value at the specified location within the target fact's `is` field. When the target fact changes, all references automatically reflect the new value.
 
-**Write Behavior**:
-- When `replace` is `"this"` (default): Writing to the embed replaces the sigil itself with the new value
-- When `replace` is `"source"`: Writing to the embed follows the reference and modifies the target.
-- **Property assignments within the embed**: Always mutate the target fact regardless of `replace` setting
+**Write Behavior**: When a link sigil is assigned a new value, the sigil itself is overwritten and replaced with the new value. The target fact remains unchanged.
+- When `overwrite` is `"this"` (default): Writing to the link replaces the sigil itself with the new value
+- When `overwrite` is `"redirect"`: Writing to the link follows the reference and modifies the target fact
+- **Property assignments within the link**: Always mutate the target fact regardless of `overwrite` setting
 
 #### Example with Default Values
 
-When `accept` and `source` are omitted, they default to the embedder's values, creating a self-reference:
+When `accept` and `source` are omitted, they default to the linker's values, creating a self-reference:
 
 ```json
 {
@@ -150,7 +147,7 @@ When `accept` and `source` are omitted, they default to the embedder's values, c
     "displayName": "ali",
     "nickname": {
       "/": {
-        "embed@1": {
+        "link@1": {
           "path": ["displayName"]
         }
       }
@@ -160,7 +157,7 @@ When `accept` and `source` are omitted, they default to the embedder's values, c
 }
 ```
 
-In this example, the embed creates a self-reference to the same fact (`user:alice` with `application/json`) at the `displayName` path, effectively creating an alias `nickname` for the `displayName` property.
+In this example, the link creates a self-reference to the same fact (`user:alice` with `application/json`) at the `displayName` path, effectively creating an alias within the same fact.
 
 #### Example
 
@@ -172,9 +169,11 @@ In this example, the embed creates a self-reference to the same fact (`user:alic
     "name": "Alice Smith",
     "manager": {
       "/": {
-        "embed@1": {
+        "link@1": {
+          "accept": "application/json",
           "source": "user:bob",
-          "path": ["name"]
+          "path": ["name"],
+          "overwrite": "redirect"
         }
       }
     }
@@ -192,7 +191,8 @@ In this example, the embed creates a self-reference to the same fact (`user:alic
   "is": {
     "currentUser": {
       "/": {
-        "embed@1": {
+        "link@1": {
+          "accept": "application/json",
           "source": "session:current",
           "path": ["user"],
           "schema": {
@@ -209,13 +209,13 @@ In this example, the embed creates a self-reference to the same fact (`user:alic
 }
 ```
 
-## Embed Write Behavior Examples
+## Link Write Behavior Examples
 
-The `replace` field controls how property assignment behaves:
+The `overwrite` field controls how property assignment behaves:
 
-### Default Behavior (`replace: "this"`)
+### Default Behavior (`overwrite: "this"`)
 
-When you assign to an embed with default settings, you **replace the embed sigil itself**:
+When you assign to a link with default settings, you **replace the link sigil itself**:
 
 ```json
 // Initial state
@@ -225,7 +225,7 @@ When you assign to an embed with default settings, you **replace the embed sigil
   "is": {
     "manager": {
       "/": {
-        "embed@1": {
+        "link@1": {
           "accept": "application/json",
           "source": "user:bob",
           "path": ["name"]
@@ -240,16 +240,16 @@ When you assign to an embed with default settings, you **replace the embed sigil
   "the": "application/json",
   "of": "user:alice",
   "is": {
-    "manager": "Charlie"  // Embed sigil replaced with literal value
+    "manager": "Charlie"  // Link sigil replaced with literal value
   }
 }
 ```
 
 The target fact (`user:bob`) remains unchanged.
 
-### Source Replacement (`replace: "source"`)
+### Link Replacement (`overwrite: "redirect"`)
 
-When you assign to an embed with `replace: "source"`, you **replace the target fact's `is` field**:
+When you assign to a link with `overwrite: "redirect"`, you **replace the target fact's `is` field**:
 
 ```json
 // Initial state
@@ -259,11 +259,10 @@ When you assign to an embed with `replace: "source"`, you **replace the target f
   "is": {
     "manager": {
       "/": {
-        "embed@1": {
+        "link@1": {
           "accept": "application/json",
           "source": "user:bob",
-          "path": ["name"],
-          "replace": "source"
+          "path": ["name"]
         }
       }
     }
@@ -271,18 +270,18 @@ When you assign to an embed with `replace: "source"`, you **replace the target f
 }
 
 // After alice.manager = "Charlie"
-// The embed remains, but user:bob fact is modified
+// The link remains, but user:bob fact is modified
 {
   "the": "application/json",
   "of": "user:alice",
   "is": {
     "manager": {
       "/": {
-        "embed@1": {
+        "link@1": {
           "accept": "application/json",
           "source": "user:bob",
           "path": ["name"],
-          "replace": "source"
+          "overwrite": "redirect"
         }
       }
     }
@@ -293,16 +292,16 @@ When you assign to an embed with `replace: "source"`, you **replace the target f
 {
   "the": "application/json",
   "of": "user:bob",
-  "is": { "name": "Charlie" }  // name field is updated
+  "is": "Charlie"  // Entire `is` field replaced
 }
 ```
 
 ### Property Mutation (Always Affects Target)
 
-Mutations within the embedded value always affect the target fact regardless of `replace` setting. Here we embed the entire user:bob object and then mutate a property within it:
+Mutations within the linked value always affect the target fact regardless of `overwrite` setting. Here we link the entire user:bob object and then mutate a property within it:
 
 ```json
-// alice.manager embeds the whole user:bob object
+// alice.manager links the whole user:bob object
 {
   "the": "application/json",
   "of": "user:alice",
@@ -310,7 +309,7 @@ Mutations within the embedded value always affect the target fact regardless of 
     "name": "Alice Smith",
     "manager": {
       "/": {
-        "embed@1": {
+        "link@1": {
           "accept": "application/json",
           "source": "user:bob"
         }
@@ -333,21 +332,21 @@ Mutations within the embedded value always affect the target fact regardless of 
 
 ### Use Cases
 
-- **`replace: "this"`**: Use when you want a mutable reference that can be replaced with direct values
-- **`replace: "source"`**: Use when you want transparent redirection, like permanent redirects or symbolic links
+- **`overwrite: "this"`**: Use when you want a mutable reference that can be replaced with direct values
+- **`overwrite: "redirect"`**: Use when you want transparent redirection, like permanent redirects or symbolic links
 
 ### Binary Content Sigils
 
-Binary content sigils are references that need to be interpreted as `Blob` instances. They can use either immutable references to a binary content, inline binary data, or mutable references (embed sigils) for binary data that can be updated.
+Binary content sigils are references that need to be interpreted as `Blob` instances. They can use either immutable references for content that never changes, or mutable references (link sigils) for binary data that can be updated.
 
 #### Blob Sigil (`blob@1`)
 
-The blob sigil provides references to binary data that should be interpreted as a `Blob` instance. It can reference either immutable content via immutable references or mutable binary facts via embed sigils.
+The blob sigil provides references to binary data that should be interpreted as a `Blob` instance. It can reference either immutable content via immutable references or mutable binary facts via link sigils.
 
 #### Fields
 
-- `type` (optional): Media type of the binary data. If omitted and content is referenced by immutable reference, it will be inferred from content as either `application/json` or `application/octet-stream`. If content is referenced by embed sigil, content type will be the type of resolved data.
-- `content` (required): Either an embed sigil referencing a fact, an immutable reference to immutable content, or inline binary data using bytes representation
+- `type` (optional): Media type of the binary data. If omitted and content is referenced by immutable reference, it will be inferred from content as either `application/json` or `application/octet-stream`. If content is referenced by link sigil, content type will be the type of resolved data.
+- `content` (required): Either a link sigil referencing a fact, an immutable reference to immutable content, or inline binary data using bytes representation
 
 #### TypeScript Definition
 
@@ -355,7 +354,7 @@ The blob sigil provides references to binary data that should be interpreted as 
 type BlobSigil = {
   "blob@1": {
     type?: MIME // defaults to application/octet-stream
-    content: EmbedSigil | Reference | Bytes
+    content: LinkSigil | Reference | Bytes
   }
 }
 
@@ -378,7 +377,7 @@ When `content` is inline bytes, the binary data is embedded directly and the con
 
 Blob sigils work directly with the memory protocol's binary fact support by referencing facts that contain binary data. This approach enables efficient storage and reuse of binary content across multiple references while maintaining proper media type information.
 
-#### Example with Embed Reference
+#### Example with Link Reference
 
 ```json
 {
@@ -392,7 +391,7 @@ Blob sigils work directly with the memory protocol's binary fact support by refe
           "type": "image/png",
           "content": {
             "/": {
-              "embed@1": {
+              "link@1": {
                 "accept": "image/png",
                 "source": "blob:avatar-alice-2024"
               }
@@ -460,8 +459,8 @@ The file sigil is an extension of the blob sigil that provides references to bin
 
 #### Fields
 
-- `type` (optional): Media type of the binary data. If omitted and content is referenced by immutable reference, it will be inferred from content as either `application/json` or `application/octet-stream`. If content is referenced by embed sigil, content type will be the type of resolved data. If content is inline bytes, defaults to `application/octet-stream`.
-- `content` (optional): Either an embed sigil referencing a fact, an immutable reference to immutable content, or inline binary data using bytes representation. If omitted, only metadata is provided
+- `type` (optional): Media type of the binary data. If omitted and content is referenced by immutable reference, it will be inferred from content as either `application/json` or `application/octet-stream`. If content is referenced by link sigil, content type will be the type of resolved data. If content is inline bytes, defaults to `application/octet-stream`.
+- `content` (optional): Either a link sigil referencing a fact, an immutable reference to immutable content, or inline binary data using bytes representation. If omitted, only metadata is provided
 - `name` (optional): Filename
 
 #### TypeScript Definition
@@ -470,7 +469,7 @@ The file sigil is an extension of the blob sigil that provides references to bin
 type FileSigil = {
   "file@1": {
     type?: MIME    // same inference rules as blob sigil
-    content?: EmbedSigil | Reference | Bytes // optional reference to binary data
+    content?: LinkSigil | Reference | Bytes // optional reference to binary data
     name?: string  // optional filename
   }
 }
@@ -494,7 +493,7 @@ When `content` is inline bytes, the content type defaults to `application/octet-
           "type": "application/pdf",
           "content": {
             "/": {
-              "embed@1": {
+              "link@1": {
                 "accept": "application/pdf",
                 "source": "blob:report-pdf-2024"
               }
@@ -555,21 +554,21 @@ Implementations MUST:
 
 ### Write Handling
 
-Implementations MUST handle embed sigil writes based on the operation type and `replace` setting:
+Implementations MUST handle link sigil writes based on the operation type and `overwrite` setting:
 
 #### Property Assignment
 
-For property assignment (`alice.manager = value`), behavior depends on the `replace` field:
+For property assignment (`alice.manager = value`), behavior depends on the `overwrite` field:
 
-**`replace: "this"` (default)**:
-1. **Replace sigil**: Replace the entire embed sigil with the new value
-2. **Preserve target**: The target fact referenced by the embed remains unchanged
+**`overwrite: "this"` (default)**:
+1. **Replace sigil**: Replace the entire link sigil with the new value
+2. **Preserve target**: The target fact referenced by the link remains unchanged
 3. **Local mutation**: The write affects only the containing fact
 
-**`replace: "embed"`**:
-1. **Follow embed**: Follow the embed to the target fact first
+**`overwrite: "redirect"`**:
+1. **Follow link**: Follow the link to the target fact first
 2. **Replace target**: Replace the target fact's `is` field with the new value
-3. **Preserve embed**: The embed sigil itself remains unchanged in the containing fact
+3. **Preserve link**: The link sigil itself remains unchanged in the containing fact
 4. **Validate**: Apply schema validation if specified before writing to target
 5. **Maintain causality**: Ensure writes maintain proper fact causal chains for the target fact
 
@@ -577,12 +576,12 @@ For property assignment (`alice.manager = value`), behavior depends on the `repl
 
 For property mutation (`alice.manager.name = value`), implementations MUST:
 
-1. **Always follow embed**: Follow the embed to the target fact regardless of `replace` setting
+1. **Always follow link**: Follow the link to the target fact regardless of `overwrite` setting
 2. **Route writes**: Redirect write operations to the underlying target fact at the specified path
-3. **Preserve embed**: The embed sigil itself remains unchanged in the containing fact
+3. **Preserve link**: The link sigil itself remains unchanged in the containing fact
 4. **Validate**: Apply schema validation if specified before writing to target
 5. **Maintain causality**: Ensure writes maintain proper fact causal chains for the target fact
-6. **Transaction integrity**: Process embed writes within proper memory protocol transactions
+6. **Transaction integrity**: Process link writes within proper memory protocol transactions
 
 ### Reactive Updates
 
@@ -627,7 +626,7 @@ Implementations MAY choose to support subsets of sigil types based on their spec
 
 ### Version Evolution
 
-Sigil types include version suffixes (e.g., `embed@1`) to enable backward-compatible evolution:
+Sigil types include version suffixes (e.g., `link@1`) to enable backward-compatible evolution:
 
 1. **New versions**: Can add fields or change behavior while maintaining old version support
 2. **Deprecation**: Old versions should be supported during transition periods
@@ -639,27 +638,27 @@ Implementations can use TypeScript's union types to support multiple versions:
 
 ```typescript
 // Support for multiple versions of the same sigil
-type EmbedSigilAny = EmbedSigil1 | EmbedSigil2 // when @2 is introduced
+type LinkSigilAny = LinkSigil1 | LinkSigil2 // when @2 is introduced
 
-type EmbedSigil1 = {
-  "embed@1": {
+type LinkSigil1 = {
+  "link@1": {
     accept?: string
     source?: URI
     path?: JSONPath
     space?: SpaceDID
-    replace?: "this" | "embed"
+    overwrite?: "this" | "redirect"
     schema?: JSONSchema
   }
 }
 
 // Future version example
-type EmbedSigil2 = {
-  "embed@2": {
+type LinkSigil2 = {
+  "link@2": {
     accept?: string
     source?: URI
     path?: JSONPath
     space?: SpaceDID
-    replace?: "this" | "embed"
+    overwrite?: "this" | "redirect"
     schema?: JSONSchema
     // hypothetical new fields
     cache?: boolean
@@ -668,13 +667,13 @@ type EmbedSigil2 = {
 }
 
 // Version-aware sigil processing
-function processEmbedSigil(sigil: EmbedSigilAny): unknown {
-  if ("embed@1" in sigil) {
-    return processEmbed1(sigil["embed@1"])
-  } else if ("embed@2" in sigil) {
-    return processEmbed2(sigil["embed@2"])
+function processLinkSigil(sigil: LinkSigilAny): unknown {
+  if ("link@1" in sigil) {
+    return processLink1(sigil["link@1"])
+  } else if ("link@2" in sigil) {
+    return processLink2(sigil["link@2"])
   }
-  throw new Error("Unsupported embed sigil version")
+  throw new Error("Unsupported link sigil version")
 }
 ```
 
@@ -694,7 +693,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
     "title": "Project Status Report",
     "author": {
       "/": {
-        "embed@1": {
+        "link@1": {
           "accept": "application/json",
           "source": "user:current",
           "path": ["name"]
@@ -731,7 +730,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
           "sources": [
             {
               "/": {
-                "embed@1": {
+                "link@1": {
                   "accept": "application/json",
                   "source": "config:default"
                 }
@@ -772,7 +771,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
             "name": "Alice Smith",
             "profile": {
               "/": {
-                "embed@1": {
+                "link@1": {
                   "accept": "application/json",
                   "source": "profile:alice-public"
                 }
@@ -793,7 +792,7 @@ Existing facts without sigils remain fully compatible. Sigils are additive and d
                   "type": "image/jpeg",
                   "content": {
                     "/": {
-                      "embed@1": {
+                      "link@1": {
                         "accept": "image/jpeg",
                         "source": "blob:avatar-alice-profile"
                       }
