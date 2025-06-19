@@ -193,7 +193,7 @@ In this example, the link creates a self-reference to the same fact (`user:alice
       "/": {
         "link@1": {
           "accept": "application/json",
-          "source": "session:current",
+          "source": "session:bz2134dq2",
           "path": ["user"],
           "schema": {
             "type": "object",
@@ -512,9 +512,9 @@ When `content` is inline bytes, the content type defaults to `application/octet-
 
 Computational sigils use mutable references to create dynamic relationships, computed values, and data transformations based on other facts.
 
-#### Charm Sigil (`charm@1`)
+#### Spell Sigil (`spell@1`)
 
-The charm sigil provides references to TypeScript modules that compute values based on input data and write results to specified outputs. It enables computed values within facts by executing TypeScript code with specified imports, inputs, and outputs.
+The spell sigil defines reusable TypeScript modules that can be invoked by charm sigils. It contains the function definition including imports, exports, and main function specification.
 
 #### Fields
 
@@ -522,29 +522,71 @@ The charm sigil provides references to TypeScript modules that compute values ba
 - `imports` (required): Record mapping import names to immutable references containing the module code
 - `exports` (required): Object with `"."` property pointing to the entry point module via immutable reference
 - `main` (optional): Name of the main export function, defaults to `"default"`
-- `input` (required): Arguments passed to the main function, can be a record of named inputs or a single JSON value, supporting embed sigils for dynamic data
-- `output` (required): Destination where the return value is written, can be a record of named outputs or a single destination, supporting embed sigils for dynamic targets
+
+#### TypeScript Definition
+
+```typescript
+type SpellSigil = {
+  "spell@1": {
+    language: "typescript"
+    imports: Record<string, Reference>
+    exports: { ".": Reference }
+    main?: string
+  }
+}
+```
+
+#### Charm Sigil (`charm@1`)
+
+The charm sigil provides function invocation by referencing a spell and specifying input data and output destinations. It enables computed values within facts by executing spells with specified inputs and outputs.
+
+#### Fields
+
+- `spell` (required): Reference to a spell sigil defining the function to execute
+- `input` (required): Arguments passed to the main function, can be a record of named inputs or a single JSON value, supporting link sigils for dynamic data
+- `output` (required): Destination where the return value is written, can be a record of named outputs or a single destination, supporting link sigils for dynamic targets
 
 #### TypeScript Definition
 
 ```typescript
 type CharmSigil = {
   "charm@1": {
-    language: "typescript"
-    imports: Record<string, Reference>
-    exports: { ".": Reference }
-    main?: string
-    input: Record<string, EmbedSigil | JSONValue> | JSONValue
-    output: Record<string, EmbedSigil | JSONValue> | JSONValue
+    spell: Reference | LinkSigil
+    input: Record<string, LinkSigil | JSONValue> | JSONValue
+    output: Record<string, LinkSigil | JSONValue> | JSONValue
   }
 }
 ```
 
 #### Resolution Behavior
 
-Charms resolve by loading the TypeScript module from the entry point reference, importing any specified dependencies, calling the main function with the provided input, and writing the result to the specified output destination. The TypeScript code executes in a sandboxed environment with access only to the explicitly imported modules.
+Charms resolve by loading the spell from the referenced spell sigil, importing any specified dependencies from the spell, calling the main function with the provided input, and writing the result to the specified output destination. The TypeScript code executes in a sandboxed environment with access only to the explicitly imported modules from the spell.
 
-#### Example
+#### Spell Example
+
+```json
+{
+  "the": "application/json",
+  "of": "spell:sales-calculator",
+  "is": {
+    "/": {
+      "spell@1": {
+        "language": "typescript",
+        "imports": {
+          "lodash": { "/": "ba4jca7rv4dlr5n5uuvcz7iht5omeukavhzbbpmc5w4hcp6dl4y5sfkp5" }
+        },
+        "exports": {
+          ".": { "/": "ca5kbd8su5emr6n6vvwdz8jiu6pnfvlbwizccqnd6x5idq7em5z6tfls6" }
+        },
+        "main": "calculateTotal"
+      }
+    }
+  },
+  "cause": "ea7mdf0uw7gos8p8xxydz0klw8rpgxndykaedspd8z7kfs9go7b8vhmsu8"
+}
+```
+
+#### Charm Example
 
 ```json
 {
@@ -554,27 +596,20 @@ Charms resolve by loading the TypeScript module from the entry point reference, 
     "totalSales": {
       "/": {
         "charm@1": {
-          "language": "typescript",
-          "imports": {
-            "lodash": { "/": "ba4jca7rv4dlr5n5uuvcz7iht5omeukavhzbbpmc5w4hcp6dl4y5sfkp5" }
-          },
-          "exports": {
-            ".": { "/": "ca5kbd8su5emr6n6vvwdz8jiu6pnfvlbwizccqnd6x5idq7em5z6tfls6" }
-          },
-          "main": "calculateTotal",
+          "spell": { "/": "ea7mdf0uw7gos8p8xxydz0klw8rpgxndykaedspd8z7kfs9go7b8vhmsu8" },
           "input": {
             "salesData": {
               "/": {
-                "embed@1": {
+                "link@1": {
                   "accept": "application/json",
-                  "source": "sales:oeu242"
+                  "source": "sales:12-06-2023"
                 }
               }
             }
           },
           "output": {
             "/": {
-              "embed@1": {
+              "link@1": {
                 "accept": "application/json",
                 "source": "report:monthly",
                 "path": ["totalAmount"]
