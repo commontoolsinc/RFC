@@ -16,9 +16,9 @@ This RFC extends the [Memory Protocol] with a standardized system for creating r
 
 1. **Inline references**: Embed data directly within facts using [IPLD data model] types.
 2. **Immutable references**: Reference data by content using [merkle reference]s which are valid [IPLD Links].
-3. **Mutable references**: Reference data it's memory address using `link` sigils.
+3. **Mutable references**: Reference data by its memory address using `link` sigils.
 4. **Blob references**: Reference binary data interpreted as `Blob` instances
-5. **File references**: Reference binary data interperted as `File` instances.
+5. **File references**: Reference binary data interpreted as `File` instances.
 
 These reference types enable sophisticated data modeling including binary content references, computed data sources, and relational queries within facts, while preserving the causal integrity of the memory protocol. References are resolved by the [Schema Query Protocol], which provides the `/memory/graph/query` capability for advanced querying with automatic resolution.
 
@@ -40,9 +40,9 @@ This RFC addresses these needs by defining five fundamental reference types that
 
 ## IPLD Data Model and DAG-JSON Convention
 
-This protocol uses the [IPLD data model] which provides a canonical way to represent structured data that is encoding-agnostic. The IPLD data model supports the same basic types as JSON (null, boolean, integer, float, string, bytes, list, map) plus additional types for bytes and cryptographic identifiers.
+This protocol uses the [IPLD data model] which provides a canonical way to represent structured data that is encoding-agnostic. The IPLD data model supports the same basic types as JSON (null, boolean, integer, float, string, list, map) plus additional types for binary data and cryptographic links.
 
-For JSON encoding, we follow the [DAG-JSON] specification which provides a standard way to represent IPLD data in JSON format. The DAG-JSON specification uses the `/` field as a special namespace for encoding data types outside of JSON data model. We adopt encoding for [bytes] and [links] per [DAG-JSON] specification and define our own custom data types under `/` field as described in more detail in this document.
+For JSON encoding, we follow the [DAG-JSON] specification which provides a standard way to represent IPLD data in JSON format. The DAG-JSON specification uses the `/` field as a special namespace for encoding data types outside the JSON data model. We adopt the standard encoding for [bytes] and [links] per the [DAG-JSON] specification and define our own custom data types under the `/` field as described in detail in this document.
 
 This approach:
 - Maintains compatibility with standard JSON parsers
@@ -53,7 +53,7 @@ This approach:
 
 ## Reference Types
 
-This protocol describes set of reference types with different characteristics and use cases:
+This protocol describes a set of reference types with different characteristics and use cases:
 
 ### Reference Resolution
 
@@ -61,11 +61,11 @@ References are resolved by the [Schema Query Protocol] to reduce roundtrips when
 
 ### Inline References
 
-Inline references embed data directly within facts `is` filed using values conforming to the [IPLD data model]. Binary data can be inlined as IPLD [bytes].
+Inline references embed data directly within facts' `is` field using values conforming to the [IPLD data model]. Binary data can be inlined as IPLD [bytes].
 
 #### Bytes in JSON
 
-Inline bytes in JSON encoding follow [DAG-JSON] specifiaction for representing [bytes]. Memory protocol implementation is RECOMMENDED to impose reasonable size limits for inlined binary data.
+Inline bytes in JSON encoding follow the [DAG-JSON] specification for representing [bytes]. Memory protocol implementations are RECOMMENDED to impose reasonable size limits for inlined binary data.
 
 ##### TypeScript Definition
 
@@ -124,17 +124,17 @@ type Reference = {
 ```
 ### Mutable References
 
-Mutable references use `link` sigils to reference facts that can be updated over time. These references automatically reflect changes to a addressed data.
+Mutable references use `link` sigils to reference facts that can be updated over time. These references automatically reflect changes to the addressed data.
 
 **Key Properties**:
-- Reference facts by address in memory space (`accept`, `source`, `space`, `path`)
-- Automatically reflect changes when addressed data is updated
+- Reference facts by address in memory space using coordinates (`accept`, `source`, `space`, `path`)
+- Automatically reflect changes when the addressed data is updated
 - Support path navigation within the target fact's `is` field
 - Provide configurable write behavior through the `overwrite` field
 
 #### Link Sigil (`link@1`)
 
-The `link` sigil provides mutable references to JSON values held by other facts. If `path` is omitted it references whole JSON value - `is` field of the addressed fact. If `accept` is omitted, it defaults to the type of the fact link is embedded in. If `source` is omitted, it defaults to the entity link is embedded in. If both are omitted, it creates a self-reference. The `overwrite` field controls write behavior.
+The `link` sigil provides mutable references to JSON values held by other facts. If `path` is omitted, it references the whole JSON value - the `is` field of the addressed fact. If `accept` is omitted, it defaults to the type of the fact the link is embedded in. If `source` is omitted, it defaults to the entity the link is embedded in. If both are omitted, it creates a self-reference. The `overwrite` field controls write behavior.
 
 > ℹ️ Therefore `link` with omitted `accept`, `source` and `path` represents a self-reference.
 
@@ -154,11 +154,11 @@ type LinkSigil = {
   "link@1": {
     // defaults to the entity containing this link
     source?: URI
-    // HTTP Accept header format, defaults to the type contaning this link
+    // HTTP Accept header format, defaults to the type containing this link
     accept?: string
     // defaults to the space containing this link
     space?: SpaceDID
-    // defaults to the empty path [] representing `is` of the addressed fact.
+    // defaults to the empty path [] representing `is` of the addressed fact
     path?: Array<string|number>
     // defaults to "this"
     overwrite?: "this" | "redirect"
@@ -174,7 +174,7 @@ Link sigils resolve to the current value at the specified location within the ta
 
 ##### Example with Default Values
 
-When `accept`, `source` or `space` are omitted, they implicitly inherit `type`, entity and space of the record this link is contained in. If all are omitted it creates a self-reference:
+When `accept`, `source`, or `space` are omitted, they implicitly inherit the `type`, entity, and space of the record this link is contained in. If all are omitted, it creates a self-reference:
 
 ```json
 {
@@ -199,7 +199,7 @@ In this example, the link creates a self-reference to the same fact (`user:alice
 
 #### Write Behavior
 
-Setting property in the referenced data structure keeps fact containing the link unchanged and forwards changes to the addressed memory space.
+Setting a property in the referenced data structure keeps the fact containing the link unchanged and forwards changes to the addressed memory space.
 
 ##### Example of setting property inside reference
 
@@ -229,8 +229,8 @@ Setting property in the referenced data structure keeps fact containing the link
   }
 }
 
-// After profile.contact.email = "alice@web.mail" we end up with the first
-// updated fact and second fact remaining unchanged
+// After profile.contact.email = "alice@web.mail", we end up with the first
+// fact updated and the second fact remaining unchanged
 {
   "the": "application/json",
   "of": "user:alice",
@@ -257,10 +257,10 @@ Setting property in the referenced data structure keeps fact containing the link
 }
 ```
 
-Behavior of setting a property that is a link sigil itself depends on the `overwrite` setting:
+The behavior of setting a property that is a link sigil itself depends on the `overwrite` setting:
 
-- When `overwrite` is `"this"` (default): Property is replaced.
-- When `overwrite` is `"redirect"`: Property addressed by the link link is updated.
+- When `overwrite` is `"this"` (default): The property is replaced.
+- When `overwrite` is `"redirect"`: The property addressed by the link is updated.
 
 
 ##### Link Write Behavior Examples
@@ -269,7 +269,7 @@ The `overwrite` field controls how property assignment behaves:
 
 ###### Default Behavior (`overwrite: "this"`)
 
-When assigning a value to a property that is a link with a `overwrite: "this"` (default) setting, property is **replaced with a value**:
+When assigning a value to a property that is a link with an `overwrite: "this"` (default) setting, the property is **replaced with the value**:
 
 ```json
 // Before state
@@ -321,7 +321,7 @@ The addressed `archived` property of the comment (`comment:4737`) remains unchan
 
 ###### Redirect Behavior (`overwrite: "redirect"`)
 
-When assigning a value to a property that is a link with a `overwrite: "redirect"` setting, value in addressed memory space is updated.
+When assigning a value to a property that is a link with an `overwrite: "redirect"` setting, the value in the addressed memory space is updated.
 
 ```json
 // Initial state
@@ -379,7 +379,7 @@ When assigning a value to a property that is a link with a `overwrite: "redirect
 
 ### Blob References
 
-Blob references are sigils that need to be interpreted as `Blob` instances. They can use inline or immutable reference for content, or a mutable references (link sigils) for binary data that can be updated.
+Blob references are sigils that need to be interpreted as `Blob` instances. They can use inline bytes, immutable references for content, or mutable references (link sigils) for binary data that can be updated.
 
 #### Blob Sigil (`blob@1`)
 
@@ -393,7 +393,7 @@ The blob sigil provides references to binary data that should be interpreted as 
 #### TypeScript Definition
 
 ```typescript
-interface BlobSigil {
+type BlobSigil {
   "blob@1": {
     type?: MediaType
     content: LinkSigil | Reference | Bytes
@@ -405,7 +405,7 @@ type MediaType = `${string}/${string}`
 
 #### Resolution Behavior
 
-When `content` is inline bytes, the binary data is embedded directly and the content type defaults to `application/octet-stream` if no `type` field is specified.
+Blob sigils resolve to `Blob` instances by referencing data through the `content` field. When `content` is a link sigil, the content type is determined by the type of the resolved data. When `content` is an immutable reference, the content type is inferred from the content as either `application/json` or `application/octet-stream` if no `type` field is specified. When `content` is inline bytes, the binary data is embedded directly and the content type defaults to `application/octet-stream` if no `type` field is specified. In all cases, implementations SHOULD resolve to native `Blob` instances.
 
 #### Relationship to Binary Facts
 
@@ -495,9 +495,11 @@ The file sigil is an extension of the blob sigil that provides references to bin
 #### TypeScript Definition
 
 ```typescript
-interface FileSigil extends BlobSigil {
+type FileSigil = {
   "file@1": {
-    name?: string  // optional filename
+    type?: string // Media type, same inference rules as blob sigil
+    content?: LinkSigil | Reference | Bytes // optional reference to binary data
+    name?: string // optional filename
   }
 }
 ```
@@ -511,7 +513,7 @@ Sigils operate entirely within the `is` field of facts, preserving the memory pr
 - `the` field remains the media type of the containing fact
 - `of` field remains the resource URI of the containing fact
 - `cause` field maintains causal consistency as defined by the memory protocol
-- Sigils reference memory spaces but from the memory protocol's perspective are just data structures.
+- Sigils reference other facts but from the memory protocol's perspective are just data structures in the `is` field.
 
 ### Query Integration
 
