@@ -342,7 +342,8 @@ When assigning a value to a property that is a link with an `overwrite: "redirec
         "link@1": {
           "accept": "application/json",
           "source": "comment:4737",
-          "path": ["archived"]
+          "path": ["archived"],
+          ”overwrite”: “redirect”
         }
       }
     }
