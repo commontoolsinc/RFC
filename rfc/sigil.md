@@ -45,7 +45,6 @@ This protocol uses the [IPLD data model] which provides a canonical way to repre
 For JSON encoding, we follow the [DAG-JSON] specification which provides a standard way to represent IPLD data in JSON format. The DAG-JSON specification uses the `/` field as a special namespace for encoding data types outside the JSON data model. We adopt the standard encoding for [bytes] and [links] per the [DAG-JSON] specification and define our own custom data types under the `/` field as described in detail in this document.
 
 This approach:
-
 - Maintains compatibility with standard JSON parsers
 - Provides a clear namespace for special types separate from user data
 - Enables progressive enhancement where simple JSON becomes linkable
@@ -81,6 +80,7 @@ type Bytes = {
 
 ##### Example
 
+
 ```json
 // Binary data using DAG-JSON bytes
 {
@@ -106,6 +106,7 @@ Immutable references use [merkle reference]s that provide cryptographic integrit
 - Provide cryptographic integrity guarantees
 - Never change - the same content always has the same reference and same reference resolve to the same content.
 
+
 ##### TypeScript Definition
 
 ```ts
@@ -122,13 +123,11 @@ type Reference = {
   "/": "ba4jca7rv4dlr5n5uuvcz7iht5omeukavhzbbpmc5w4hcp6dl4y5sfkp5"
 }
 ```
-
 ### Mutable References
 
 Mutable references use `link` sigils to reference facts that can be updated over time. These references automatically reflect changes to the addressed data.
 
 **Key Properties**:
-
 - Reference facts by address in memory space using coordinates (`accept`, `source`, `space`, `path`)
 - Automatically reflect changes when the addressed data is updated
 - Support path navigation within the target fact's `is` field
@@ -263,6 +262,7 @@ The behavior of setting a property that is a link sigil itself depends on the `o
 
 - When `overwrite` is `"this"` (default): The property is replaced.
 - When `overwrite` is `"redirect"`: The property addressed by the link is updated.
+
 
 ##### Link Write Behavior Examples
 
