@@ -100,7 +100,6 @@ Immutable references use [merkle reference]s that provide cryptographic integrit
 > ℹ️ Above constraints attempt to strike a good balance between flexibility and practicality and are optimized for expected usage.
 
 **Key Properties**:
-
 - Reference only the content of the fact's `is` field, not the entire fact structure or subset of the `is` field.
 - Use the [merkle reference] codec for content addressing
 - Provide cryptographic integrity guarantees
