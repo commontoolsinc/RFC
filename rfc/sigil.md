@@ -774,6 +774,7 @@ Sigil types include version suffixes (e.g., `link@1`) to enable backward-compati
 2. **Deprecation**: Old versions should be supported during transition periods
 3. **Migration tools**: Implementations SHOULD provide utilities for upgrading sigil versions
 
+
 [Common Tools]: https://common.tools/
 [Irakli Gozalishvili]: https://github.com/gozala
 [Memory Protocol]: ./memory.md
