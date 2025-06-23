@@ -127,20 +127,20 @@ type Reference = {
 Mutable references use `link` sigils to reference facts that can be updated over time. These references automatically reflect changes to the addressed data.
 
 **Key Properties**:
-- Reference facts by address in memory space using coordinates (`accept`, `source`, `space`, `path`)
+- Reference facts by address in memory space using coordinates (`accept`, `id`, `space`, `path`)
 - Automatically reflect changes when the addressed data is updated
 - Support path navigation within the target fact's `is` field
 - Provide configurable write behavior through the `overwrite` field
 
 #### Link Sigil (`link@1`)
 
-The `link` sigil provides mutable references to JSON values held by other facts. If `path` is omitted, it references the whole JSON value - the `is` field of the addressed fact. If `accept` is omitted, it defaults to the type of the fact the link is embedded in. If `source` is omitted, it defaults to the entity the link is embedded in. If both are omitted, it creates a self-reference. The `overwrite` field controls write behavior.
+The `link` sigil provides mutable references to JSON values held by other facts. If `path` is omitted, it references the whole JSON value - the `is` field of the addressed fact. If `accept` is omitted, it defaults to the type of the fact the link is embedded in. If `id` is omitted, it defaults to the entity the link is embedded in. If both are omitted, it creates a self-reference. The `overwrite` field controls write behavior.
 
-> ℹ️ Therefore `link` with omitted `accept`, `source` and `path` represents a self-reference.
+> ℹ️ Therefore `link` with omitted `accept`, `id` and `path` represents a self-reference.
 
 ##### Fields
 
-- `source` (optional): Resource URI of the target fact. Defaults to linker's id
+- `id` (optional): Resource URI of the target fact. Defaults to linker's id
 - `accept` (optional): Media type preferences for the target fact, following HTTP Accept header semantics. Defaults to linker's type
 - `path` (optional): Array of strings/numbers for navigating into the target fact's `is` field.
 - `space` (optional): DID of the space containing the target fact. Defaults to current space
@@ -153,7 +153,7 @@ The `link` sigil provides mutable references to JSON values held by other facts.
 type LinkSigil = {
   "link@1": {
     // defaults to the entity containing this link
-    source?: URI
+    id?: URI
     // HTTP Accept header format, defaults to the type containing this link
     accept?: string
     // defaults to the space containing this link
@@ -174,7 +174,7 @@ Link sigils resolve to the current value at the specified location within the ta
 
 ##### Example with Default Values
 
-When `accept`, `source`, or `space` are omitted, they implicitly inherit the `type`, entity, and space of the record this link is contained in. If all are omitted, it creates a self-reference:
+When `accept`, `id`, or `space` are omitted, they implicitly inherit the `type`, entity, and space of the record this link is contained in. If all are omitted, it creates a self-reference:
 
 ```json
 {
@@ -221,7 +221,7 @@ Setting a property in the referenced data structure keeps the fact containing th
     "contact": {
       "/": {
         "link@1": {
-          "source": "user:alice",
+          "id": "user:alice",
           "path": ["contact"]
         }
       }
@@ -248,7 +248,7 @@ Setting a property in the referenced data structure keeps the fact containing th
     "contact": {
       "/": {
         "link@1": {
-          "source": "user:alice",
+          "id": "user:alice",
           "path": ["contact"]
         }
       }
@@ -289,7 +289,7 @@ When assigning a value to a property that is a link with an `overwrite: "this"` 
       "/": {
         "link@1": {
           "accept": "application/json",
-          "source": "comment:4737",
+          "id": "comment:4737",
           "path": ["archived"]
         }
       }
@@ -341,7 +341,7 @@ When assigning a value to a property that is a link with an `overwrite: "redirec
       "/": {
         "link@1": {
           "accept": "application/json",
-          "source": "comment:4737",
+          "id": "comment:4737",
           "path": ["archived"],
           ”overwrite”: “redirect”
         }
@@ -369,7 +369,7 @@ When assigning a value to a property that is a link with an `overwrite: "redirec
       "/": {
         "link@1": {
           "accept": "application/json",
-          "source": "comment:4737",
+          "id": "comment:4737",
           "path": ["archived"]
         }
       }
@@ -428,7 +428,7 @@ Blob sigils work directly with the memory protocol's binary fact support by refe
             "/": {
               "link@1": {
                 "accept": "image/png",
-                "source": "blob:avatar-alice-2024"
+                "id": "blob:avatar-alice-2024"
               }
             }
           }
